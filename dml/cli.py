@@ -435,6 +435,73 @@ Use these tools proactively - don't wait to be asked. Check `/mcp` to see if DML
 
 
 @cli.command()
+@click.option("--dry-run", is_flag=True, help="Show what would be removed without modifying")
+def uninstall(dry_run: bool) -> None:
+    """Remove DML from Claude Code."""
+    import shutil
+    import subprocess
+    import re
+
+    claude_path = shutil.which("claude")
+    if not claude_path:
+        click.echo("Error: claude not found.")
+        return
+
+    # === 1. Remove MCP Server ===
+    result = subprocess.run(
+        [claude_path, "mcp", "list"],
+        capture_output=True,
+        text=True
+    )
+
+    if "dml:" in result.stdout:
+        if dry_run:
+            click.echo("Would remove DML MCP server")
+        else:
+            subprocess.run(
+                [claude_path, "mcp", "remove", "dml"],
+                capture_output=True
+            )
+            click.echo("Removed DML MCP server")
+    else:
+        click.echo("MCP server not installed")
+
+    # === 2. Remove Skill ===
+    skill_dir = Path.home() / ".claude" / "skills" / "dml"
+    if skill_dir.exists():
+        if dry_run:
+            click.echo(f"Would remove skill at {skill_dir}")
+        else:
+            shutil.rmtree(skill_dir)
+            click.echo(f"Removed DML skill")
+    else:
+        click.echo("Skill not installed")
+
+    # === 3. Remove from global CLAUDE.md ===
+    claude_md_path = Path.home() / ".claude" / "CLAUDE.md"
+    dml_marker = "<!-- DML:BEGIN -->"
+    dml_end = "<!-- DML:END -->"
+
+    if claude_md_path.exists():
+        content = claude_md_path.read_text()
+        if dml_marker in content:
+            if dry_run:
+                click.echo(f"Would remove DML section from {claude_md_path}")
+            else:
+                # Remove the DML section including surrounding newlines
+                pattern = r'\n*<!-- DML:BEGIN -->.*?<!-- DML:END -->\n*'
+                new_content = re.sub(pattern, '\n', content, flags=re.DOTALL)
+                claude_md_path.write_text(new_content.strip() + '\n')
+                click.echo(f"Removed DML section from CLAUDE.md")
+        else:
+            click.echo("CLAUDE.md has no DML section")
+
+    if not dry_run:
+        click.echo("")
+        click.echo("DML uninstalled. Restart Claude Code to apply.")
+
+
+@cli.command()
 @click.pass_context
 def view(ctx: click.Context) -> None:
     """View current memory state with Rich terminal UI."""
