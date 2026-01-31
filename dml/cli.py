@@ -690,7 +690,6 @@ def live_demo() -> None:
     store = EventStore(str(db_path))
     store.close()
 
-    # Create tmux session with split panes
     session_name = "dml-demo"
 
     # Kill existing session if any
@@ -701,77 +700,50 @@ def live_demo() -> None:
     project_dir = Path(__file__).parent.parent
     uv_path = shutil.which("uv") or "uv"
 
-    # Create new session
+    click.echo("Starting tmux session...")
+
+    # Create session with a single command that sets everything up
+    # Using tmux new-session with a shell command that does the split
+    setup_script = f'''
+cd "{project_dir}"
+tmux split-window -h "{uv_path} run dml monitor"
+tmux select-pane -L
+clear
+echo ""
+echo "  🐱 DML Live Demo"
+echo "  ════════════════════════════════════════════════════"
+echo ""
+echo "  Chat with Claude about planning a trip to Japan."
+echo "  Watch the memory panel on the right update live!"
+echo ""
+echo "  Suggested flow:"
+echo "    1. Ask about trip to Japan, mention budget"
+echo "    2. Express interest in traditional ryokans"
+echo "    3. Later, mention wheelchair accessibility"
+echo "    4. Watch what happens to previous decisions!"
+echo ""
+echo "  ════════════════════════════════════════════════════"
+echo ""
+echo "  Type: claude    to start chatting"
+echo ""
+exec $SHELL
+'''
+
+    # Write setup script to temp file
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as f:
+        f.write(setup_script)
+        script_path = f.name
+
+    os.chmod(script_path, 0o755)
+
+    # Launch tmux with the setup script
     subprocess.run([
-        "tmux", "new-session", "-d", "-s", session_name,
-        "-c", str(project_dir)
-    ], check=True)
+        "tmux", "new-session", "-s", session_name, f"bash {script_path}"
+    ])
 
-    # Split vertically (left/right) - right pane for monitor
-    subprocess.run([
-        "tmux", "split-window", "-h", "-t", session_name,
-        "-c", str(project_dir)
-    ], check=True)
-
-    # Resize: left pane 70%, right pane 30%
-    subprocess.run([
-        "tmux", "resize-pane", "-t", f"{session_name}:0.1", "-x", "40"
-    ], check=True)
-
-    time_module.sleep(0.3)
-
-    # Right pane (pane 1): run monitor
-    subprocess.run([
-        "tmux", "send-keys", "-t", f"{session_name}:0.1",
-        f"cd {project_dir} && {uv_path} run dml monitor", "Enter"
-    ], check=True)
-
-    time_module.sleep(0.3)
-
-    # Left pane (pane 0): show instructions
-    subprocess.run([
-        "tmux", "send-keys", "-t", f"{session_name}:0.0",
-        "clear", "Enter"
-    ], check=True)
-
-    time_module.sleep(0.2)
-
-    # Send instructions line by line
-    instructions = [
-        "echo ''",
-        "echo '  🐱 DML Live Demo'",
-        "echo '  ════════════════════════════════════════════════════'",
-        "echo ''",
-        "echo '  Chat with Claude about planning a trip to Japan.'",
-        "echo '  Watch the memory panel on the right update live!'",
-        "echo ''",
-        "echo '  Suggested conversation flow:'",
-        "echo '    1. Ask about trip to Japan, mention budget'",
-        "echo '    2. Express interest in traditional ryokans'",
-        "echo '    3. Later, mention wheelchair accessibility needs'",
-        "echo '    4. Watch what happens to previous decisions!'",
-        "echo ''",
-        "echo '  ════════════════════════════════════════════════════'",
-        "echo ''",
-        "echo '  Type: claude    to start chatting'",
-        "echo ''",
-    ]
-
-    for line in instructions:
-        subprocess.run([
-            "tmux", "send-keys", "-t", f"{session_name}:0.0",
-            line, "Enter"
-        ], check=True)
-
-    # Select left pane
-    subprocess.run([
-        "tmux", "select-pane", "-t", f"{session_name}:0.0"
-    ], check=True)
-
-    # Attach to session
-    click.echo("Launching tmux session...")
-    click.echo("Type 'claude' in the left pane to start chatting!")
-    subprocess.run(["tmux", "attach-session", "-t", session_name])
+    # Cleanup
+    os.unlink(script_path)
 
 
 @cli.command()
