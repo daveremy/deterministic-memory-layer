@@ -340,45 +340,69 @@ You have DML MCP tools available. Use them to track facts, constraints, and deci
 
 ## Tools Available
 
-- **memory.add_fact**: Record facts (budget, destination, dates, preferences)
-- **memory.add_constraint**: Record requirements and restrictions
-- **memory.record_decision**: Record decisions with rationale
+- **memory.add_fact**: Record raw data (numbers, names, attributes)
+- **memory.add_constraint**: Record rules and requirements
+- **memory.record_decision**: Record choices, commitments, and confirmations
 - **memory.query**: Search memory before making recommendations
 - **memory.get_context**: Get full memory state
 - **memory.trace_provenance**: Trace where a fact came from
 - **memory.time_travel**: View memory at a past point
 - **memory.simulate_timeline**: "What if" counterfactual analysis
 
-## When to Use
+## Facts vs Decisions
 
-**Record facts immediately** when the user mentions:
-- Amounts (budget, prices) → `add_fact` key="budget"
-- Places (destination, locations) → `add_fact` key="destination"
-- Dates and times → `add_fact` key="dates"
-- Preferences → `add_fact` key="preference.<type>"
+**Facts** = raw data, attributes, values
+- "My budget is $4000" → fact (budget=4000)
+- "I live in Tucson" → fact (location=Tucson)
+- "I use a wheelchair" → fact (mobility=wheelchair)
 
-**Record constraints** when the user expresses:
-- Requirements: "must have", "need", "require"
-- Restrictions: "can't", "won't", "avoid", "never"
-- Accessibility needs, dietary restrictions, etc.
+**Decisions** = choices, confirmations, commitments
+- "Let's go with April 10-20" → decision (user chose dates)
+- "I'll take option 2" → decision (user selected)
+- "Book the Hakone hotel" → decision (user committed)
+- "Yes, that itinerary looks good" → decision (user confirmed)
 
-**Record decisions** when you:
-- Make a recommendation
-- Choose between options
-- Commit to a course of action
+**Key rule**: When the user CHOOSES or CONFIRMS something, record it as a decision, not just a fact update.
 
-**Query memory** before making recommendations to check for relevant constraints.
+## When to Record
 
-## Example
+**Record facts** for raw information:
+- Amounts, budgets, prices
+- Places, destinations, locations
+- Attributes (wheelchair type, dietary needs)
+- Preferences as data points
 
-User: "My budget is $4000 and I need wheelchair accessible hotels"
+**Record constraints** for rules:
+- "must have", "need", "require" → required constraint
+- "can't", "won't", "avoid", "never" → prohibition constraint
+- "prefer", "would like" → preferred constraint
 
-→ `memory.add_fact(key="budget", value="4000")`
-→ `memory.add_constraint(text="wheelchair accessible hotels required", priority="required")`
+**Record decisions** for choices:
+- User confirms a date, option, or plan
+- User says "yes", "let's do it", "go with that"
+- User commits to booking/reserving something
+- You make a recommendation they accept
 
-Before recommending a hotel:
-→ `memory.query(question="accessibility requirements")`
-→ `memory.record_decision(text="Recommend Hotel X", rationale="Meets accessibility requirements")`
+## Example Flow
+
+User: "My budget is $5000"
+→ add_fact(key="budget", value="5000")
+
+User: "I need wheelchair accessible places"
+→ add_constraint(text="wheelchair accessible required", priority="required")
+
+User: "Let's do April 12-19"
+→ record_decision(text="Travel dates: April 12-19, 2026", rationale="User confirmed dates")
+
+You: "I recommend Hotel Accessible Tokyo"
+User: "Yes, book that one"
+→ record_decision(text="Book Hotel Accessible Tokyo", rationale="User confirmed hotel choice")
+
+## Important
+
+- Record decisions for ANY user confirmation or choice
+- Check constraints before recording decisions (violations will be blocked)
+- Use query to refresh your memory before recommendations
 '''
 
     if skill_file.exists():
