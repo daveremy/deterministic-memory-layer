@@ -287,11 +287,19 @@ def install(dry_run: bool) -> None:
     # === 1. Install MCP Server ===
     config_path = Path.home() / ".claude" / "mcp.json"
 
-    # Use absolute paths (critical for Claude to find the server)
+    # Find uv and project directory for reliable execution
+    uv_path = shutil.which("uv")
+    if not uv_path:
+        click.echo("Error: uv not found. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh")
+        return
+
+    project_dir = str(Path(__file__).parent.parent.resolve())
+
+    # Use uv run for reliable environment handling
     dml_config = {
         "dml": {
-            "command": sys.executable,  # Absolute path to Python
-            "args": ["-m", "dml", "serve"],
+            "command": uv_path,
+            "args": ["run", "--directory", project_dir, "dml", "serve"],
             "env": {}
         }
     }
