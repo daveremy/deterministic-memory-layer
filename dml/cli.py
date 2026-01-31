@@ -696,17 +696,20 @@ def live_demo() -> None:
     subprocess.run(["tmux", "kill-session", "-t", session_name],
                    capture_output=True, check=False)
 
-    # Get paths
-    project_dir = Path(__file__).parent.parent
+    # Get paths - use home directory for clean demo environment
+    demo_dir = Path.home()
+    project_dir = Path(__file__).parent.parent.resolve()
     uv_path = shutil.which("uv") or "uv"
+    # Run dml from project directory but work in home directory
+    dml_cmd = f"{uv_path} run --directory '{project_dir}' dml"
 
     click.echo("Starting tmux session...")
 
     # Create session with a single command that sets everything up
     # Using tmux new-session with a shell command that does the split
     setup_script = f'''
-cd "{project_dir}"
-tmux split-window -h "{uv_path} run dml monitor"
+cd "{demo_dir}"
+tmux split-window -h "{dml_cmd} monitor"
 tmux select-pane -L
 clear
 echo ""
