@@ -643,6 +643,13 @@ def demo(ctx: click.Context) -> None:
     store.close()
 
 
+@cli.command("chat-demo")
+def chat_demo() -> None:
+    """Run the interactive chat demo with Clawde."""
+    from dml.chat_demo import main
+    main()
+
+
 @cli.command()
 @click.option("--init", "do_init", is_flag=True, help="Initialize DB if it doesn't exist")
 def serve(do_init: bool) -> None:
