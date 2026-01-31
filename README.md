@@ -2,8 +2,6 @@
 
 **Event-driven memory for reliable, self-improving AI agents.**
 
-Built for [WeaveHacks 3](https://lu.ma/weavehacks3) (Jan 31 - Feb 1, 2026)
-
 ---
 
 ## Table of Contents
@@ -54,7 +52,7 @@ Existing memory systems (MemGPT/Letta, Mem0, A-Mem, LangChain Memory) focus on *
 
 ## The Approach
 
-DML uses **event-driven memory**—adapting event sourcing from distributed systems to agent memory:
+DML uses **event-driven memory**—inspired by event sourcing patterns in distributed systems:
 
 - **Events are the source of truth**: Current state is derived by replaying events, not stored directly
 - **Append-only**: Events are never modified or deleted; corrections create new events
@@ -362,7 +360,7 @@ deterministic-memory-layer/
 
 ## Acknowledgments
 
-Built during WeaveHacks 3, sponsored by:
+Built during [WeaveHacks 3](https://lu.ma/weavehacks3) (Jan 31 - Feb 1, 2026), sponsored by:
 - [Weights & Biases](https://wandb.ai/) (Weave) - Observability integration
 - [Redis](https://redis.io/) - Event store backend design
 - [Daily](https://www.daily.co/) (Pipecat)
