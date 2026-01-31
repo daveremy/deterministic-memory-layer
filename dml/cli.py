@@ -696,8 +696,9 @@ def live_demo() -> None:
     subprocess.run(["tmux", "kill-session", "-t", session_name],
                    capture_output=True, check=False)
 
-    # Get paths - use home directory for clean demo environment
-    demo_dir = Path.home()
+    # Create a clean demo directory
+    demo_dir = Path.home() / ".dml-demo"
+    demo_dir.mkdir(parents=True, exist_ok=True)
     project_dir = Path(__file__).parent.parent.resolve()
     uv_path = shutil.which("uv") or "uv"
     # Run dml from project directory but work in home directory
