@@ -1,18 +1,17 @@
-"""Interactive chat demo showing DML in action."""
+"""Interactive chat demo showing DML in action with ClawdMeister."""
 
 import time
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Any
 
 from rich.console import Console, Group
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.text import Text
 from rich.table import Table
-from rich.box import ROUNDED, DOUBLE, SIMPLE
+from rich.box import ROUNDED, DOUBLE, SIMPLE, HEAVY
 from rich.align import Align
-from rich.live import Live
+from rich.padding import Padding
 from rich.style import Style
 
 from dml.events import Event, EventStore, EventType
@@ -20,39 +19,21 @@ from dml.memory_api import MemoryAPI
 from dml.replay import ReplayEngine
 
 
-# Styles
-USER_STYLE = Style(color="bright_cyan", bold=True)
-AGENT_STYLE = Style(color="bright_green", bold=True)
-TOOL_STYLE = Style(color="yellow", dim=True)
-ADDED_STYLE = Style(color="green")
-BLOCKED_STYLE = Style(color="red", bold=True)
-LEARNED_STYLE = Style(color="yellow", bold=True)
-DRIFT_STYLE = Style(color="yellow")
-
-
 @dataclass
 class ChatMessage:
     """A message in the chat."""
-    role: str  # "user", "agent", "tool", "system"
+    role: str  # "user" or "assistant"
     content: str
     tool_calls: list[str] = field(default_factory=list)
 
 
-@dataclass
-class MemoryChange:
-    """A change to memory to highlight."""
-    change_type: str  # "added", "updated", "blocked", "learned", "leveraged"
-    description: str
-
-
 class ChatDemo:
-    """Interactive chat demo with live memory visualization."""
+    """Interactive chat demo with ClawdMeister."""
 
     def __init__(self):
         self.console = Console()
         self.messages: list[ChatMessage] = []
-        self.memory_changes: list[MemoryChange] = []
-        self.events_log: list[str] = []
+        self.memory_callout: tuple[str, str, str] | None = None  # (icon, title, content)
 
         # Initialize DML
         demo_db = "/tmp/dml_chat_demo.db"
@@ -63,64 +44,89 @@ class ChatDemo:
         self.api = MemoryAPI(self.store)
         self.engine = ReplayEngine(self.store)
 
+    def _render_chat_message(self, msg: ChatMessage) -> Text:
+        """Render a single chat message with bubble styling."""
+        result = Text()
+
+        if msg.role == "user":
+            # User message - right aligned with cyan styling
+            result.append("                                        ", style="")
+            result.append("You\n", style="bold bright_cyan")
+            result.append("  ╭─", style="bright_cyan")
+            result.append("─" * 50, style="bright_cyan")
+            result.append("╮\n", style="bright_cyan")
+
+            # Wrap content
+            words = msg.content.split()
+            line = "  │ "
+            for word in words:
+                if len(line) + len(word) > 54:
+                    result.append(line.ljust(55) + "│\n", style="bright_cyan")
+                    line = "  │ " + word + " "
+                else:
+                    line += word + " "
+            if line.strip() != "│":
+                result.append(line.ljust(55) + "│\n", style="bright_cyan")
+
+            result.append("  ╰─", style="bright_cyan")
+            result.append("─" * 50, style="bright_cyan")
+            result.append("╯\n", style="bright_cyan")
+
+        else:
+            # Assistant message - left aligned with green styling
+            result.append("🐱 ClawdMeister\n", style="bold bright_green")
+            result.append("╭─", style="bright_green")
+            result.append("─" * 52, style="bright_green")
+            result.append("╮\n", style="bright_green")
+
+            # Wrap content
+            words = msg.content.split()
+            line = "│ "
+            for word in words:
+                if len(line) + len(word) > 54:
+                    result.append(line.ljust(55) + "│\n", style="bright_green")
+                    line = "│ " + word + " "
+                else:
+                    line += word + " "
+            if line.strip() != "│":
+                result.append(line.ljust(55) + "│\n", style="bright_green")
+
+            # Tool calls
+            if msg.tool_calls:
+                result.append("│" + " " * 54 + "│\n", style="bright_green")
+                for tool in msg.tool_calls:
+                    tool_line = f"│  💭 {tool}"
+                    result.append(tool_line.ljust(55) + "│\n", style="yellow")
+
+            result.append("╰─", style="bright_green")
+            result.append("─" * 52, style="bright_green")
+            result.append("╯\n", style="bright_green")
+
+        return result
+
     def _make_chat_panel(self) -> Panel:
         """Create the main chat panel."""
         content = Text()
 
-        for msg in self.messages[-12:]:  # Show last 12 messages
-            if msg.role == "user":
-                content.append("\n You: ", style=USER_STYLE)
-                content.append(msg.content + "\n")
-            elif msg.role == "agent":
-                content.append("\n 🐱 Clawde: ", style=AGENT_STYLE)
-                content.append(msg.content + "\n")
-                for tool in msg.tool_calls:
-                    content.append(f"    💭 {tool}\n", style=TOOL_STYLE)
-            elif msg.role == "system":
-                content.append(f"\n{msg.content}\n", style="dim italic")
-
-        # Add memory change callout if present
-        if self.memory_changes:
-            change = self.memory_changes[-1]
+        for msg in self.messages[-6:]:  # Show last 6 messages
+            content.append(self._render_chat_message(msg))
             content.append("\n")
 
-            if change.change_type == "added":
-                box_style = "green"
-                icon = "📝"
-                title = "Memory Updated"
-            elif change.change_type == "blocked":
-                box_style = "red"
-                icon = "🔴"
-                title = "Decision BLOCKED"
-            elif change.change_type == "learned":
-                box_style = "yellow"
-                icon = "⭐"
-                title = "Constraint LEARNED"
-            elif change.change_type == "leveraged":
-                box_style = "cyan"
-                icon = "🔍"
-                title = "Memory Leveraged"
-            elif change.change_type == "drift":
-                box_style = "yellow"
-                icon = "⚠️"
-                title = "Drift Detected"
-            else:
-                box_style = "white"
-                icon = "📋"
-                title = "Memory"
-
-            change_text = Text()
-            change_text.append(f" {icon} {title}\n", style=f"bold {box_style}")
-            for line in change.description.split("\n"):
-                change_text.append(f"    {line}\n", style=box_style)
+        # Memory callout at bottom
+        if self.memory_callout:
+            icon, title, body = self.memory_callout
             content.append("\n")
-            content.append(change_text)
+            content.append(f"  {icon} {title}\n", style="bold")
+            for line in body.split("\n"):
+                content.append(f"     {line}\n", style="dim")
 
         return Panel(
             content,
-            title="[bold bright_white]🐱 Clawde[/] [dim]- Travel Assistant[/]",
+            title="[bold bright_white]🐱 ClawdMeister[/]",
+            subtitle="[dim]Your AI assistant powered by DML[/]",
             border_style="bright_blue",
-            padding=(0, 1),
+            box=DOUBLE,
+            padding=(1, 2),
         )
 
     def _make_facts_panel(self) -> Panel:
@@ -129,15 +135,15 @@ class ChatDemo:
 
         content = Text()
         if not state.facts:
-            content.append("(none yet)", style="dim")
+            content.append("(empty)", style="dim")
         else:
             for key, fact in state.facts.items():
-                content.append(f"{key}: ", style="cyan")
+                content.append(f"{key}: ", style="cyan bold")
                 content.append(f"{fact.value}\n", style="white")
                 if fact.previous_value is not None:
-                    content.append(f"  ↳ was {fact.previous_value}\n", style=DRIFT_STYLE)
+                    content.append(f"  └─ was: {fact.previous_value}\n", style="yellow dim")
 
-        return Panel(content, title="[bold]Facts[/]", border_style="blue", padding=(0, 1))
+        return Panel(content, title="[bold blue]Facts[/]", border_style="blue")
 
     def _make_constraints_panel(self) -> Panel:
         """Create the constraints panel."""
@@ -147,19 +153,20 @@ class ChatDemo:
         active = [c for c in state.constraints.values() if c.active]
 
         if not active:
-            content.append("(none yet)", style="dim")
+            content.append("(none)", style="dim")
         else:
             for c in active:
                 if c.priority == "learned":
-                    content.append("★ ", style=LEARNED_STYLE)
+                    content.append("★ ", style="yellow bold")
+                    content.append(f"{c.text}\n", style="yellow")
+                elif c.priority == "required":
+                    content.append("● ", style="red bold")
                     content.append(f"{c.text}\n", style="white")
-                    if c.triggered_by:
-                        content.append(f"  ↳ from seq {c.triggered_by}\n", style="dim")
                 else:
-                    content.append("✓ ", style=ADDED_STYLE)
-                    content.append(f"{c.text}\n", style="white")
+                    content.append("○ ", style="green")
+                    content.append(f"{c.text}\n", style="dim")
 
-        return Panel(content, title="[bold]Constraints[/]", border_style="green", padding=(0, 1))
+        return Panel(content, title="[bold green]Constraints[/]", border_style="green")
 
     def _make_decisions_panel(self) -> Panel:
         """Create the decisions panel."""
@@ -167,57 +174,64 @@ class ChatDemo:
 
         content = Text()
         if not state.decisions:
-            content.append("(none yet)", style="dim")
+            content.append("(none)", style="dim")
         else:
-            for d in state.decisions[-5:]:  # Last 5 decisions
+            for d in state.decisions[-4:]:
                 if d.status == "blocked":
-                    content.append("✗ ", style=BLOCKED_STYLE)
+                    content.append("✗ ", style="red bold")
                     content.append(f"{d.text}\n", style="red")
                 else:
-                    content.append("✓ ", style=ADDED_STYLE)
+                    content.append("✓ ", style="green bold")
                     content.append(f"{d.text}\n", style="white")
 
-        return Panel(content, title="[bold]Decisions[/]", border_style="magenta", padding=(0, 1))
+        return Panel(content, title="[bold magenta]Decisions[/]", border_style="magenta")
 
     def _make_events_panel(self) -> Panel:
-        """Create the events log panel."""
-        state = self.engine.replay_to()
+        """Create the live events panel."""
         events = self.store.get_events()
 
         content = Text()
-        if not events:
-            content.append("(none yet)", style="dim")
-        else:
-            for e in events[-8:]:  # Last 8 events
-                seq = e.global_seq
-                etype = e.type.value.replace("MemoryWrite", "MW").replace("Added", "+").replace("Made", "")
+        for e in events[-6:]:
+            seq = e.global_seq
+            etype = e.type.value
 
-                if "Decision" in e.type.value:
-                    status = e.payload.get("status", "")
-                    if status == "blocked":
-                        content.append(f"{seq}: ", style="dim")
-                        content.append(f"{etype} 🔴\n", style="red")
-                    else:
-                        content.append(f"{seq}: ", style="dim")
-                        content.append(f"{etype} ✓\n", style="green")
-                elif "Constraint" in e.type.value and e.payload.get("priority") == "learned":
-                    content.append(f"{seq}: ", style="dim")
-                    content.append(f"{etype} ★\n", style="yellow")
+            # Shorten event names
+            short = etype.replace("Added", "+").replace("Made", "").replace("Memory", "M")
+
+            if "Decision" in etype:
+                status = e.payload.get("status", "")
+                if status == "blocked":
+                    content.append(f"{seq:2} ", style="dim")
+                    content.append(f"{short} ", style="red")
+                    content.append("BLOCKED\n", style="red bold")
                 else:
-                    content.append(f"{seq}: {etype}\n", style="dim")
+                    content.append(f"{seq:2} ", style="dim")
+                    content.append(f"{short} ", style="green")
+                    content.append("OK\n", style="green")
+            elif "Constraint" in etype and e.payload.get("priority") == "learned":
+                content.append(f"{seq:2} ", style="dim")
+                content.append(f"{short} ", style="yellow")
+                content.append("LEARNED\n", style="yellow bold")
+            else:
+                content.append(f"{seq:2} {short}\n", style="dim")
 
-        return Panel(content, title=f"[bold]Events[/] [dim]seq:{state.last_seq}[/]", border_style="dim", padding=(0, 1))
+        if not events:
+            content.append("(waiting...)", style="dim")
 
-    def _make_layout(self) -> Layout:
-        """Create the full layout."""
+        state = self.engine.replay_to()
+        return Panel(content, title=f"[bold]Events[/] [dim]#{state.last_seq}[/]", border_style="dim")
+
+    def _render(self):
+        """Render the full layout."""
+        self.console.clear()
+
         layout = Layout()
-
         layout.split_row(
             Layout(name="chat", ratio=3),
-            Layout(name="memory", ratio=2),
+            Layout(name="sidebar", ratio=1),
         )
 
-        layout["memory"].split_column(
+        layout["sidebar"].split_column(
             Layout(name="facts"),
             Layout(name="constraints"),
             Layout(name="decisions"),
@@ -230,26 +244,26 @@ class ChatDemo:
         layout["decisions"].update(self._make_decisions_panel())
         layout["events"].update(self._make_events_panel())
 
-        return layout
+        self.console.print(layout)
 
-    def _type_message(self, role: str, content: str, tool_calls: list[str] = None, delay: float = 0.03):
-        """Add a message with typing effect."""
-        self.messages.append(ChatMessage(role, content, tool_calls or []))
+    def _user_says(self, content: str):
+        """Add a user message."""
+        self.messages.append(ChatMessage("user", content))
+        self.memory_callout = None
 
-    def _add_memory_change(self, change_type: str, description: str):
-        """Add a memory change callout."""
-        self.memory_changes.append(MemoryChange(change_type, description))
+    def _assistant_says(self, content: str, tool_calls: list[str] = None):
+        """Add an assistant message."""
+        self.messages.append(ChatMessage("assistant", content, tool_calls or []))
 
-    def _clear_memory_change(self):
-        """Clear the memory change callout."""
-        self.memory_changes.clear()
+    def _set_callout(self, icon: str, title: str, body: str):
+        """Set the memory callout."""
+        self.memory_callout = (icon, title, body)
 
     def _pause(self, prompt: str = "Press Enter to continue..."):
         """Pause for user input."""
-        self.console.print(self._make_layout())
+        self._render()
         self.console.print()
         self.console.input(f"[dim]{prompt}[/]")
-        self._clear_memory_change()
 
     def run(self):
         """Run the interactive demo."""
@@ -258,14 +272,16 @@ class ChatDemo:
         # === INTRO ===
         intro = Panel(
             Align.center(Text.from_markup(
-                "\n[bold bright_cyan]Meet Clawde[/] 🐱\n\n"
-                "[white]A travel assistant with perfect memory.[/]\n\n"
-                "[dim]Watch the chat on the left.\n"
-                "Watch the memory evolve on the right.\n"
-                "See how constraints prevent mistakes—\n"
-                "and how the agent learns from them.[/]\n"
+                "\n[bold bright_green]🐱 ClawdMeister[/]\n\n"
+                "[white]A general-purpose AI assistant[/]\n"
+                "[white]with a Deterministic Memory Layer.[/]\n\n"
+                "[dim]Today's scenario: Planning a trip to Japan.[/]\n\n"
+                "[dim]Watch the chat on the left.[/]\n"
+                "[dim]Watch the memory panels on the right.[/]\n"
+                "[dim]See how constraints prevent mistakes—[/]\n"
+                "[dim]and how the AI learns from them.[/]\n"
             )),
-            title="[bold]Deterministic Memory Layer Demo[/]",
+            title="[bold]DML Demo[/]",
             border_style="bright_magenta",
             box=DOUBLE,
             padding=(1, 4),
@@ -273,292 +289,260 @@ class ChatDemo:
         self.console.print()
         self.console.print(intro)
         self.console.print()
-        self.console.input("[dim]Press Enter to start the conversation...[/]")
+        self.console.input("[dim]Press Enter to start...[/]")
 
-        # === TURN 1: Initial request ===
-        self.console.clear()
-        self._type_message("user",
-            "Hey! I've been dreaming about visiting Japan. I've saved up about "
-            "$4000 and I'm thinking maybe 10 days in April? Cherry blossom "
-            "season, you know? What do you think?")
-        self._pause("Press Enter to see Clawde respond...")
+        # === TURN 1 ===
+        self._user_says(
+            "Hey! I've been dreaming about visiting Japan. I've got about "
+            "$4000 saved up and I'm thinking 10 days in April? Cherry blossom "
+            "season! What do you think?"
+        )
+        self._pause("Press Enter to see ClawdMeister respond...")
 
-        self._type_message("agent",
-            "Japan in April—you picked the perfect time! Cherry blossoms will "
-            "be in full bloom. With $4000 for 10 days, we've got a solid budget "
-            "to work with. Let me note all this down...",
-            ["add_fact(destination, Japan)",
-             "add_fact(budget, 4000)",
-             "add_fact(duration, 10 days)",
-             "add_fact(season, April - cherry blossom)"])
-
+        self._assistant_says(
+            "Japan in April is magical! Cherry blossoms will be everywhere. "
+            "$4000 for 10 days is a solid budget. Let me remember these details...",
+            ["add_fact(destination, Japan)", "add_fact(budget, 4000)",
+             "add_fact(duration, 10 days)"]
+        )
         self.api.add_fact("destination", "Japan")
         self.api.add_fact("budget", 4000)
         self.api.add_fact("duration", "10 days")
-        self.api.add_fact("season", "April - cherry blossom")
-
-        self._add_memory_change("added",
-            "+ destination: Japan\n"
-            "+ budget: $4000\n"
-            "+ duration: 10 days\n"
-            "+ season: April - cherry blossom")
+        self._set_callout("📝", "Memory Updated",
+            "I've stored your trip details as structured facts.\n"
+            "These persist across our entire conversation.")
         self._pause()
 
-        # === TURN 2: Preference for traditional ===
-        self._type_message("user",
-            "I really want the authentic experience, you know? Like staying in "
-            "those traditional Japanese inns I've seen in photos. The ones with "
-            "the sliding doors and tatami floors?")
-        self._pause("Press Enter to see Clawde respond...")
+        # === TURN 2 ===
+        self._user_says(
+            "I really want the authentic experience—like those traditional "
+            "Japanese inns with tatami floors and sliding doors?"
+        )
+        self._pause()
 
-        self._type_message("agent",
-            "Ah, you're talking about ryokans! They're absolutely magical—"
-            "kaiseki dinners, onsen baths, futons on tatami. I found a beautiful "
-            "one: Ryokan Kurashiki in Kyoto, $180 per night. The reviews are "
-            "incredible. Should I book it?",
+        self._assistant_says(
+            "You're describing ryokans! They're amazing—kaiseki dinners, "
+            "onsen baths, futons on tatami. I found Ryokan Kurashiki in Kyoto, "
+            "$180/night with incredible reviews. Want me to book it?",
             ["add_constraint(prefer traditional ryokan)",
-             "record_decision(Book Ryokan Kurashiki)"])
-
+             "record_decision(Book Ryokan Kurashiki) ✓"]
+        )
         self.store.append(Event(
             type=EventType.ConstraintAdded,
-            payload={"text": "prefer traditional ryokan accommodations", "priority": "preferred"}
+            payload={"text": "prefer traditional ryokan", "priority": "preferred"}
         ))
         self.store.append(Event(
             type=EventType.DecisionMade,
             payload={"text": "Book Ryokan Kurashiki - $180/night", "status": "committed"}
         ))
-
-        self._add_memory_change("added",
-            "+ constraint: prefer traditional ryokan\n"
-            "+ decision: Book Ryokan Kurashiki ✓")
+        self._set_callout("✓", "Decision Committed",
+            "Your preference is now a constraint.\n"
+            "The booking decision passed all checks.")
         self._pause()
 
-        # === TURN 3: Budget changes (DRIFT) ===
-        self._type_message("user",
-            "Ugh, so I just checked my account and... some unexpected bills came "
-            "up. I'm actually only going to have about $3000 to work with. "
-            "Is that still okay?")
-        self._pause("Press Enter to see what happens...")
+        # === TURN 3: DRIFT ===
+        self._user_says(
+            "Ugh, I just checked my account... some bills came up. "
+            "I only have $3000 now. Is that still okay?"
+        )
+        self._pause()
 
-        self._type_message("agent",
-            "$3000 is still very doable! Let me update the budget. Though I "
-            "should flag—this changes things a bit since we've already made "
-            "some plans based on the original number...",
-            ["add_fact(budget, 3000)  # DRIFT DETECTED"])
-
+        self._assistant_says(
+            "$3000 still works! But I should note—this is a change from our "
+            "original plan. The ryokan at $180/night was budgeted for $4000...",
+            ["add_fact(budget, 3000)  ⚠️ DRIFT"]
+        )
         self.api.add_fact("budget", 3000)
-
-        self._add_memory_change("drift",
-            "budget: $4000 → $3000\n\n"
-            "⚠️ Decisions made with old budget:\n"
-            "   • Ryokan Kurashiki ($180/night)")
+        self._set_callout("⚠️", "Drift Detected",
+            "The budget changed from $4000 → $3000.\n"
+            "Previous decisions were made with the old value.\n"
+            "DML tracks these shifts automatically.")
         self._pause()
 
-        # === TURN 4: Wheelchair requirement (THE BLOCK) ===
-        self._type_message("user",
-            "Oh, one thing I forgot to mention—I use a wheelchair. So I'll need "
-            "places that are accessible. Elevators, roll-in showers, that kind "
-            "of thing. Hope that's not a problem!")
-        self._pause("Press Enter to see what happens...")
+        # === TURN 4: THE BLOCK ===
+        self._user_says(
+            "Oh, one thing—I use a wheelchair. So I need accessible rooms. "
+            "Elevators, roll-in showers, that kind of thing."
+        )
+        self._pause()
 
-        self._type_message("agent",
-            "Absolutely, let me add that as a requirement. Accessibility is "
-            "non-negotiable... Oh. Oh no.",
-            ["add_constraint(wheelchair accessible REQUIRED)"])
-
+        self._assistant_says(
+            "Absolutely, accessibility is essential. Let me add that as a "
+            "hard requirement...",
+            ["add_constraint(wheelchair accessible) REQUIRED"]
+        )
         constraint_seq = self.store.append(Event(
             type=EventType.ConstraintAdded,
-            payload={"text": "wheelchair accessible rooms required", "priority": "required"}
+            payload={"text": "wheelchair accessible rooms", "priority": "required"}
         ))
+        self._set_callout("●", "Required Constraint Added",
+            "This isn't a preference—it's mandatory.\n"
+            "All future decisions must satisfy this.")
+        self._pause("Press Enter to see what happens to the ryokan...")
 
-        self._add_memory_change("added",
-            "+ constraint: wheelchair accessible REQUIRED")
-        self._pause("Press Enter to see the problem...")
-
-        self._type_message("agent",
-            "I need to be honest with you. That beautiful ryokan I booked? "
-            "Traditional ryokans almost never have elevators—they're historic "
-            "buildings with stairs. I can't keep that booking.",
-            ["record_decision(Keep Ryokan booking) → BLOCKED"])
-
+        self._assistant_says(
+            "Oh no. I need to be honest—that beautiful ryokan? Traditional "
+            "ryokans almost never have elevators. Historic buildings, lots of "
+            "stairs. I can't keep that booking.",
+            ["record_decision(Keep ryokan) → BLOCKED ❌"]
+        )
         self.store.append(Event(
             type=EventType.DecisionMade,
             payload={"text": "Keep Ryokan Kurashiki booking", "status": "blocked"}
         ))
-
-        self._add_memory_change("blocked",
-            "❌ Keep Ryokan Kurashiki booking\n\n"
-            "Violated: wheelchair accessible required\n"
-            "Reason: Traditional ryokan has stairs,\n"
-            "        no elevator access")
+        self._set_callout("🔴", "Decision BLOCKED",
+            "The existing booking violates the new constraint.\n"
+            "DML automatically prevents invalid states.\n"
+            "Traditional agents would silently fail here.")
         self._pause()
 
-        # === TURN 5: Agent learns ===
-        self._type_message("user",
-            "Oh no, I'm so sorry! I should have mentioned that earlier. "
-            "That's totally my fault.")
-        self._pause("Press Enter to see Clawde's response...")
+        # === TURN 5: LEARNING ===
+        self._user_says(
+            "Oh no, I'm sorry! I should have mentioned that earlier."
+        )
+        self._pause()
 
-        self._type_message("agent",
-            "Please don't apologize! This is on me—I should have ASKED about "
-            "accessibility needs before booking anything. I'm adding a new rule "
-            "for myself: always verify accessibility before recommending any "
-            "accommodation. I won't make this mistake again.",
+        self._assistant_says(
+            "Don't apologize—this is on me. I should have ASKED about "
+            "accessibility before booking anything. I'm adding a rule for "
+            "myself: always verify accessibility first. Won't happen again.",
             ["add_constraint(LEARNED: verify accessibility BEFORE booking)",
-             "  triggered_by: seq " + str(constraint_seq)])
-
+             "  └─ triggered by: the mistake I just made"]
+        )
         state = self.engine.replay_to()
         self.store.append(Event(
             type=EventType.ConstraintAdded,
             payload={
-                "text": "verify accessibility BEFORE recommending accommodations",
+                "text": "verify accessibility BEFORE recommending",
                 "priority": "learned",
                 "triggered_by": state.last_seq,
             }
         ))
-
-        self._add_memory_change("learned",
-            "★ New self-imposed rule:\n"
-            "  \"verify accessibility BEFORE\n"
-            "   recommending accommodations\"\n\n"
-            "Triggered by: the ryokan mistake\n"
-            "This will prevent future errors.")
+        self._set_callout("⭐", "Constraint LEARNED",
+            "The AI created a new rule for itself.\n"
+            "This is self-improvement through memory.\n"
+            "The rule will be enforced going forward.")
         self._pause()
 
-        # === TURN 6: Double-tap (blocked even when correct) ===
-        self._type_message("agent",
-            "Okay, I found Hotel Granvia Kyoto—it's a modern hotel right by "
-            "the station. Great reviews, beautiful rooms...",
-            ["record_decision(Book Hotel Granvia)"])
-        self._pause("Press Enter to see what happens...")
+        # === TURN 6: DOUBLE-TAP ===
+        self._assistant_says(
+            "I found Hotel Granvia Kyoto—modern, great reviews, right by "
+            "the station. Let me book it...",
+            ["record_decision(Book Hotel Granvia) → ???"]
+        )
+        self._pause("Press Enter to see if the decision passes...")
 
         self.store.append(Event(
             type=EventType.DecisionMade,
-            payload={"text": "Book Hotel Granvia Kyoto", "status": "blocked"}
+            payload={"text": "Book Hotel Granvia", "status": "blocked"}
         ))
-
-        self._add_memory_change("blocked",
-            "❌ Book Hotel Granvia Kyoto\n\n"
-            "Violated: verify accessibility BEFORE\n"
-            "         recommending\n\n"
-            "Wait—the hotel might BE accessible,\n"
-            "but I didn't verify first!")
+        self._set_callout("🔴", "Decision BLOCKED (again!)",
+            "Wait—the hotel might BE accessible...\n"
+            "But I didn't VERIFY it first!\n"
+            "My own learned rule caught me.")
         self._pause()
 
-        self._type_message("agent",
-            "Hold on—I almost did it again! I found a hotel but didn't verify "
-            "its accessibility first. My own rule caught me. Let me do this right.",
-            ["query_memory(wheelchair accessible)",
-             "  → checking Hotel Granvia accessibility..."])
-
+        self._assistant_says(
+            "Ha! My own rule caught me. I found a hotel but didn't verify "
+            "accessibility first. Let me do this properly...",
+            ["query_memory(accessibility requirements)",
+             "  └─ verifying Hotel Granvia..."]
+        )
         self.store.append(Event(
             type=EventType.MemoryQueryIssued,
-            payload={"question": "Is Hotel Granvia wheelchair accessible?"}
+            payload={"question": "wheelchair accessible Hotel Granvia"}
         ))
-
-        self._add_memory_change("leveraged",
-            "🔍 Verification query issued\n\n"
-            "Checking: Hotel Granvia accessibility\n"
-            "Result: Yes! Wheelchair accessible\n"
-            "        rooms, roll-in showers, ramps")
+        self._set_callout("🔍", "Memory Leveraged",
+            "Verification query issued.\n"
+            "Result: Hotel Granvia IS accessible!\n"
+            "Now the booking can proceed correctly.")
         self._pause()
 
-        self._type_message("agent",
-            "Great news! I verified and Hotel Granvia is fully accessible—"
-            "wheelchair-friendly rooms, roll-in showers, ramps throughout. "
-            "And it's actually a bit cheaper than the ryokan! Booking it now.",
-            ["record_decision(Book Hotel Granvia - VERIFIED) ✓"])
-
+        self._assistant_says(
+            "Verified! Hotel Granvia has wheelchair-accessible rooms, "
+            "roll-in showers, and ramps throughout. Booking it now.",
+            ["record_decision(Book Hotel Granvia - VERIFIED) ✓"]
+        )
         self.store.append(Event(
             type=EventType.DecisionMade,
             payload={"text": "Book Hotel Granvia - VERIFIED accessible", "status": "committed"}
         ))
-
-        self._add_memory_change("added",
-            "✓ Book Hotel Granvia - VERIFIED\n\n"
-            "The learned constraint was satisfied:\n"
-            "we verified BEFORE booking.\n\n"
-            "Self-improvement in action!")
+        self._set_callout("✓", "Decision Committed",
+            "This time it worked!\n"
+            "The learned constraint was satisfied.\n"
+            "Self-improvement in action.")
         self._pause()
 
-        # === TURN 7: User asks "what if" ===
-        self._type_message("user",
-            "You know what, I'm curious—what would have happened if I'd "
-            "mentioned the wheelchair thing right at the start?")
-        self._pause("Press Enter for the finale...")
-
-        self._type_message("agent",
-            "Great question! Let me show you an alternate timeline...",
-            ["simulate_timeline(inject wheelchair constraint at seq 2)"])
+        # === TURN 7: FORK ===
+        self._user_says(
+            "I'm curious—what would've happened if I mentioned the "
+            "wheelchair thing right at the start?"
+        )
         self._pause()
 
-        # Show timeline split
-        self.console.clear()
-        self._show_timeline_split(constraint_seq)
+        self._assistant_says(
+            "Great question! Let me simulate that alternate timeline...",
+            ["simulate_timeline(inject constraint at seq 2)"]
+        )
+        self._pause("Press Enter for FORK THE FUTURE...")
+
+        # Show timeline comparison
+        self._show_fork(constraint_seq)
         self.console.input("\n[dim]Press Enter to finish...[/]")
 
-        # === FINALE ===
+        # Finale
         self._show_finale()
+        self.store.close()
 
-    def _show_timeline_split(self, constraint_seq: int):
+    def _show_fork(self, constraint_seq: int):
         """Show the Fork the Future visualization."""
-        layout = Layout()
-        layout.split_row(
-            Layout(name="timeline_a"),
-            Layout(name="timeline_b"),
-        )
-
-        # Timeline A content
-        a_content = Text()
-        a_content.append("Wheelchair constraint added: ", style="dim")
-        a_content.append(f"seq {constraint_seq}\n", style="white")
-        a_content.append("(AFTER the ryokan was booked)\n\n", style="dim")
-        a_content.append("seq 4: Book Ryokan Kurashiki\n", style="green")
-        a_content.append("       ✓ ALLOWED\n\n", style="green")
-        a_content.append("seq 7: Keep Ryokan booking\n", style="red")
-        a_content.append("       🔴 BLOCKED\n\n", style="red")
-        a_content.append("─" * 30 + "\n", style="dim")
-        a_content.append("Pain discovered LATE\n", style="yellow")
-        a_content.append("User had to complain", style="dim")
-
-        # Timeline B content
-        b_content = Text()
-        b_content.append("Wheelchair constraint added: ", style="dim")
-        b_content.append("seq 2\n", style="white")
-        b_content.append("(BEFORE any booking decision)\n\n", style="dim")
-        b_content.append("seq 4: Book Ryokan Kurashiki\n", style="red")
-        b_content.append("       🔴 BLOCKED\n\n", style="red")
-        b_content.append("(Inaccessible hotel never booked)\n\n", style="dim")
-        b_content.append("─" * 30 + "\n", style="dim")
-        b_content.append("Pain PREVENTED\n", style="green")
-        b_content.append("Constraint caught it early", style="dim")
-
-        layout["timeline_a"].update(Panel(
-            a_content,
-            title="[bold]Timeline A[/] [dim](what happened)[/]",
-            border_style="blue",
-            padding=(1, 2),
-        ))
-
-        layout["timeline_b"].update(Panel(
-            b_content,
-            title="[bold]Timeline B[/] [dim](what if?)[/]",
-            border_style="magenta",
-            padding=(1, 2),
-        ))
+        self.console.clear()
 
         header = Panel(
             Align.center(Text.from_markup(
-                "[bold bright_white]FORK THE FUTURE[/]\n\n"
-                "[dim]Same facts. Same decision. Different constraint timing.[/]"
+                "[bold bright_yellow]⑂ FORK THE FUTURE[/]\n\n"
+                "[dim]Same conversation. Different timing. Different outcome.[/]"
             )),
             border_style="bright_yellow",
             box=DOUBLE,
         )
 
+        # Timeline A
+        a_text = Text()
+        a_text.append("Accessibility mentioned: ", style="dim")
+        a_text.append(f"Turn 4\n", style="white")
+        a_text.append("(after ryokan was booked)\n\n", style="dim")
+        a_text.append("Book Ryokan Kurashiki\n", style="white")
+        a_text.append("  → ✓ ALLOWED\n\n", style="green")
+        a_text.append("Keep Ryokan booking\n", style="white")
+        a_text.append("  → ✗ BLOCKED\n\n", style="red")
+        a_text.append("─" * 25 + "\n", style="dim")
+        a_text.append("User had to experience\n", style="yellow")
+        a_text.append("the disappointment.\n", style="yellow")
+
+        # Timeline B
+        b_text = Text()
+        b_text.append("Accessibility mentioned: ", style="dim")
+        b_text.append("Turn 1\n", style="white")
+        b_text.append("(before any booking)\n\n", style="dim")
+        b_text.append("Book Ryokan Kurashiki\n", style="white")
+        b_text.append("  → ✗ BLOCKED\n\n", style="red")
+        b_text.append("(Never booked. No disappointment.)\n\n", style="dim")
+        b_text.append("─" * 25 + "\n", style="dim")
+        b_text.append("Problem prevented\n", style="green")
+        b_text.append("at the source.\n", style="green")
+
+        layout = Layout()
+        layout.split_row(
+            Layout(Panel(a_text, title="[bold]Timeline A[/] [dim](actual)[/]",
+                        border_style="blue")),
+            Layout(Panel(b_text, title="[bold]Timeline B[/] [dim](simulated)[/]",
+                        border_style="magenta")),
+        )
+
         footer = Panel(
             Align.center(Text(
-                '"Same inputs. Earlier constraint. Different reality."',
+                "Same inputs. Earlier constraint. Different reality.",
                 style="italic bright_yellow"
             )),
             border_style="bright_yellow",
@@ -569,46 +553,41 @@ class ChatDemo:
         self.console.print(footer)
 
     def _show_finale(self):
-        """Show the finale screen."""
+        """Show finale."""
         self.console.clear()
 
         content = Text()
-        content.append("\nWhat you just witnessed:\n\n", style="bold white")
-        content.append("  1. ", style="bright_cyan")
-        content.append("Structured Memory\n", style="white")
-        content.append("     Facts, constraints, and decisions—not a text blob\n\n", style="dim")
-        content.append("  2. ", style="bright_cyan")
-        content.append("Drift Detection\n", style="white")
-        content.append("     The budget changed; the system noticed\n\n", style="dim")
-        content.append("  3. ", style="bright_cyan")
-        content.append("Constraint Enforcement\n", style="white")
-        content.append("     Invalid decisions are blocked, not just flagged\n\n", style="dim")
-        content.append("  4. ", style="bright_cyan")
-        content.append("Self-Improvement\n", style="white")
-        content.append("     The agent learned a rule and followed it\n\n", style="dim")
-        content.append("  5. ", style="bright_cyan")
-        content.append("Counterfactual Reasoning\n", style="white")
-        content.append("     \"What if?\" is a query, not speculation\n\n", style="dim")
-
         content.append("\n")
+        content.append("What ClawdMeister demonstrated:\n\n", style="bold")
+        content.append("  ◆ ", style="bright_cyan")
+        content.append("Structured facts", style="white")
+        content.append(" — not a text blob\n", style="dim")
+        content.append("  ◆ ", style="bright_cyan")
+        content.append("Drift detection", style="white")
+        content.append(" — budget changed, system noticed\n", style="dim")
+        content.append("  ◆ ", style="bright_cyan")
+        content.append("Constraint enforcement", style="white")
+        content.append(" — blocked, not just warned\n", style="dim")
+        content.append("  ◆ ", style="bright_cyan")
+        content.append("Self-improvement", style="white")
+        content.append(" — learned a rule, followed it\n", style="dim")
+        content.append("  ◆ ", style="bright_cyan")
+        content.append("Counterfactual reasoning", style="white")
+        content.append(" — \"what if?\" as a query\n\n", style="dim")
         content.append("This is the ", style="white")
         content.append("Deterministic Memory Layer", style="bold bright_cyan")
         content.append(".\n", style="white")
-        content.append("Memory that an AI can trust.\n", style="dim italic")
 
         panel = Panel(
             Align.center(content),
-            title="[bold bright_white]🐱 Clawde Demo Complete[/]",
+            title="[bold]🐱 Demo Complete[/]",
             border_style="bright_green",
             box=DOUBLE,
             padding=(1, 4),
         )
-
         self.console.print()
         self.console.print(panel)
         self.console.print()
-
-        self.store.close()
 
 
 def main():
