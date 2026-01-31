@@ -700,6 +700,40 @@ def live_demo() -> None:
     demo_dir = Path.home() / ".dml-demo"
     demo_dir.mkdir(parents=True, exist_ok=True)
     project_dir = Path(__file__).parent.parent.resolve()
+
+    # Create CLAUDE.md with instructions for using DML tools
+    claude_md = demo_dir / "CLAUDE.md"
+    claude_md.write_text('''# DML Demo - Travel Planning Assistant
+
+You are helping plan a trip. Use your DML (Deterministic Memory Layer) MCP tools to track everything.
+
+## When to use DML tools
+
+**Use `memory.add_fact`** whenever the user mentions:
+- Budget amounts → key="budget", value="<amount>"
+- Destinations → key="destination", value="<place>"
+- Travel dates → key="travel_dates", value="<dates>"
+- Number of travelers → key="travelers", value="<count>"
+- Preferences → key="preference.<type>", value="<preference>"
+
+**Use `memory.add_constraint`** when the user expresses:
+- Requirements ("must have", "need", "require")
+- Restrictions ("can't", "won't", "avoid")
+- Accessibility needs
+- Dietary restrictions
+
+**Use `memory.record_decision`** when you:
+- Recommend a specific hotel, flight, or activity
+- Make planning decisions
+
+**Use `memory.query`** to recall facts before making recommendations.
+
+## Important
+
+- Record facts AS SOON as the user mentions them - don't wait!
+- Always check constraints before making decisions
+- The user is watching a live memory monitor - make it interesting!
+''')
     uv_path = shutil.which("uv") or "uv"
     # Run dml from project directory but work in home directory
     dml_cmd = f"{uv_path} run --directory '{project_dir}' dml"
