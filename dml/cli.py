@@ -393,9 +393,66 @@ def view(ctx: click.Context) -> None:
 @click.pass_context
 def demo(ctx: click.Context) -> None:
     """Run the travel agent demo scenario."""
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+    from rich.box import DOUBLE, ROUNDED
+    from rich.align import Align
     from dml.visualization import DMLVisualization, DecisionEntry
-    from dml.policy import PolicyEngine, WriteProposal
-    import time
+
+    console = Console()
+
+    def narrative(act: int, title: str, description: str, coming_up: str) -> None:
+        """Display a beautiful narrative panel."""
+        console.clear()
+
+        # Build content
+        content = Text()
+        content.append(f"\n{description}\n\n", style="white")
+        content.append("Coming up: ", style="dim")
+        content.append(coming_up, style="italic cyan")
+        content.append("\n")
+
+        panel = Panel(
+            Align.center(content),
+            title=f"[bold bright_white]Act {act}[/] [dim]•[/] [bold]{title}[/]",
+            border_style="bright_blue",
+            box=DOUBLE,
+            padding=(1, 4),
+        )
+        console.print()
+        console.print(panel)
+        console.print()
+        console.input("[dim]Press Enter to continue...[/]")
+
+    def finale_narrative() -> None:
+        """Display the finale panel."""
+        console.clear()
+
+        content = Text()
+        content.append("\nYou've just witnessed an AI agent that:\n\n", style="white")
+        content.append("  1. ", style="bright_blue")
+        content.append("Remembers everything deterministically\n", style="white")
+        content.append("  2. ", style="bright_blue")
+        content.append("Detects when facts drift from decisions\n", style="white")
+        content.append("  3. ", style="bright_blue")
+        content.append("Enforces constraints automatically\n", style="white")
+        content.append("  4. ", style="bright_blue")
+        content.append("Learns from its mistakes\n", style="white")
+        content.append("  5. ", style="bright_blue")
+        content.append("Can fork reality to explore what-ifs\n\n", style="white")
+        content.append("This is the Deterministic Memory Layer.\n", style="bold bright_cyan")
+
+        panel = Panel(
+            Align.center(content),
+            title="[bold bright_white]Demo Complete[/]",
+            border_style="bright_green",
+            box=DOUBLE,
+            padding=(1, 4),
+        )
+        console.print()
+        console.print(panel)
+        console.print()
 
     # Use temp DB for demo
     demo_db = "/tmp/dml_demo.db"
@@ -405,7 +462,6 @@ def demo(ctx: click.Context) -> None:
     store = EventStore(demo_db)
     api = MemoryAPI(store)
     engine = ReplayEngine(store)
-    policy = PolicyEngine()
     viz = DMLVisualization("DML: Self-Improving Travel Agent")
 
     def show_state():
@@ -426,46 +482,75 @@ def demo(ctx: click.Context) -> None:
         ]
         viz.main_view(state.last_seq, facts, constraints, decisions, decision_ledger=ledger)
 
-    click.echo("Starting DML Demo: Self-Improving Travel Agent\n")
-    time.sleep(1)
+    # === INTRO ===
+    console.clear()
+    intro = Panel(
+        Align.center(Text.from_markup(
+            "\n[bold bright_cyan]Deterministic Memory Layer[/]\n\n"
+            "[white]A travel agent that remembers, learns, and can fork reality.[/]\n\n"
+            "[dim]Watch as an AI agent books a trip to Japan,\n"
+            "makes a mistake, learns from it, and explores\n"
+            "what could have been different.[/]\n"
+        )),
+        title="[bold]Self-Improving Agent Demo[/]",
+        border_style="bright_magenta",
+        box=DOUBLE,
+        padding=(1, 4),
+    )
+    console.print()
+    console.print(intro)
+    console.print()
+    console.input("[dim]Press Enter to begin...[/]")
 
-    # Act 1: Setup
-    click.echo("Act 1: User states requirements...")
+    # === ACT 1: SETUP ===
+    narrative(
+        1, "The Request",
+        '"Plan a 10-day trip to Japan. Budget is $4000."',
+        "Watch the agent capture these facts into structured memory."
+    )
     api.add_fact("destination", "Japan")
     api.add_fact("duration", "10 days")
     api.add_fact("budget", 4000)
     show_state()
-    click.pause("Press Enter to continue...")
+    console.input("\n[dim]Press Enter to continue...[/]")
 
-    # Act 2: First decision
-    click.echo("\nAct 2: Agent books ryokan...")
+    # === ACT 2: FIRST DECISION ===
+    narrative(
+        2, "The Booking",
+        'The user wants traditional Japanese inns.\nThe agent finds a beautiful ryokan and books it.',
+        "A decision is made and committed to memory."
+    )
     store.append(Event(
         type=EventType.ConstraintAdded,
         payload={"text": "prefer traditional ryokan accommodations", "priority": "preferred"}
     ))
-
-    # Decision passes
     store.append(Event(
         type=EventType.DecisionMade,
         payload={"text": "Book Ryokan Kurashiki - $180/night", "status": "committed"}
     ))
     show_state()
-    click.pause("Press Enter to continue...")
+    console.input("\n[dim]Press Enter to continue...[/]")
 
-    # Act 3: Drift
-    click.echo("\nAct 3: Budget changes (drift!)...")
+    # === ACT 3: DRIFT ===
+    narrative(
+        3, "The Drift",
+        '"Actually, my budget is only $3000."',
+        "Watch DML detect that reality has shifted from the original plan."
+    )
     api.add_fact("budget", 3000)
     viz.show_drift_alert("budget", "$4000", "$3000", ["Ryokan Kurashiki ($180/night)"])
-    click.pause("Press Enter to continue...")
+    console.input("\n[dim]Press Enter to continue...[/]")
 
-    # Act 4: The Block
-    click.echo("\nAct 4: Wheelchair constraint blocks the booking...")
+    # === ACT 4: THE BLOCK ===
+    narrative(
+        4, "The Block",
+        '"I use a wheelchair. I need accessible rooms."',
+        "A new constraint appears. The existing booking violates it.\n\nThis is where traditional agents would fail silently.\nDML blocks the invalid state."
+    )
     constraint_seq = store.append(Event(
         type=EventType.ConstraintAdded,
         payload={"text": "wheelchair accessible rooms required", "priority": "required"}
     ))
-
-    # This decision gets blocked
     store.append(Event(
         type=EventType.DecisionMade,
         payload={"text": "Keep Ryokan Kurashiki booking", "status": "blocked"}
@@ -476,10 +561,14 @@ def demo(ctx: click.Context) -> None:
         constraint_seq,
         "Traditional ryokan has stairs, no elevator"
     )
-    click.pause("Press Enter to continue...")
+    console.input("\n[dim]Press Enter to continue...[/]")
 
-    # Act 5: Learning
-    click.echo("\nAct 5: Agent learns a new constraint...")
+    # === ACT 5: LEARNING ===
+    narrative(
+        5, "The Learning",
+        "The agent realizes it made a procedural mistake.\nIt should have verified accessibility BEFORE booking.",
+        "Watch the agent add a learned constraint to prevent\nthis mistake from ever happening again."
+    )
     state = engine.replay_to()
     store.append(Event(
         type=EventType.ConstraintAdded,
@@ -491,10 +580,14 @@ def demo(ctx: click.Context) -> None:
     ))
     viz.show_learned("verify accessibility BEFORE recommending", state.last_seq)
     show_state()
-    click.pause("Press Enter to continue...")
+    console.input("\n[dim]Press Enter to continue...[/]")
 
-    # Act 6: Double-tap
-    click.echo("\nAct 6: Agent tries to book without verifying (blocked!)...")
+    # === ACT 6: DOUBLE-TAP ===
+    narrative(
+        6, "The Double-Tap",
+        "The agent finds Hotel Granvia - which IS accessible.\nBut it tries to book without verification...",
+        "The learned constraint blocks even a CORRECT decision\nbecause the PROCEDURE wasn't followed.\n\nThis is self-improvement: discipline over luck."
+    )
     store.append(Event(
         type=EventType.DecisionMade,
         payload={"text": "Book Hotel Granvia Kyoto", "status": "blocked"}
@@ -505,9 +598,9 @@ def demo(ctx: click.Context) -> None:
         state.last_seq + 1,
         "Must verify accessibility before booking, even if hotel is accessible"
     )
-    click.pause("Press Enter to continue...")
+    console.input("\n[dim]Press Enter to see the agent do it right...[/]")
 
-    click.echo("\nAgent verifies and tries again...")
+    console.clear()
     store.append(Event(
         type=EventType.MemoryQueryIssued,
         payload={"question": "Is Hotel Granvia wheelchair accessible?"}
@@ -517,10 +610,14 @@ def demo(ctx: click.Context) -> None:
         payload={"text": "Book Hotel Granvia - VERIFIED accessible", "status": "committed"}
     ))
     show_state()
-    click.pause("Press Enter to continue...")
+    console.input("\n[dim]Press Enter for the finale...[/]")
 
-    # Act 7: Fork the Future
-    click.echo("\nAct 7: Fork the Future - what if constraint came earlier?")
+    # === ACT 7: FORK THE FUTURE ===
+    narrative(
+        7, "Fork the Future",
+        '"What if I had mentioned the wheelchair earlier?"',
+        "DML can simulate alternate timelines.\n\nWatch: same facts, same decision, but the constraint\nappears at a different point in history.\n\nDifferent timing. Different reality."
+    )
     viz.timeline_split(
         timeline_a={
             "constraint_seq": constraint_seq,
@@ -539,8 +636,10 @@ def demo(ctx: click.Context) -> None:
         injected_constraint="wheelchair accessible",
         injected_at_seq=2,
     )
+    console.input("\n[dim]Press Enter to finish...[/]")
 
-    click.echo("\n Demo complete!")
+    # === FINALE ===
+    finale_narrative()
     store.close()
 
 
