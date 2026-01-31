@@ -281,7 +281,10 @@ def run_eval(ctx: click.Context) -> None:
 @cli.command()
 @click.option("--dry-run", is_flag=True, help="Show what would be added without modifying")
 def install(dry_run: bool) -> None:
-    """Add DML to Claude Code's MCP configuration."""
+    """Add DML MCP server and skill to Claude Code."""
+    import shutil
+
+    # === 1. Install MCP Server ===
     config_path = Path.home() / ".claude" / "mcp.json"
 
     # Use absolute paths (critical for Claude to find the server)
@@ -293,6 +296,8 @@ def install(dry_run: bool) -> None:
         }
     }
 
+    mcp_installed = False
+
     # Load existing config or create new
     if config_path.exists():
         try:
@@ -303,9 +308,8 @@ def install(dry_run: bool) -> None:
             return
 
         # Backup before modifying
-        if not dry_run:
+        if not dry_run and "dml" not in config.get("mcpServers", {}):
             backup_path = config_path.with_suffix(".json.backup")
-            import shutil
             shutil.copy(config_path, backup_path)
             click.echo(f"Backed up existing config to {backup_path}")
     else:
@@ -315,20 +319,90 @@ def install(dry_run: bool) -> None:
 
     # Check if already installed (idempotent)
     if "dml" in config.get("mcpServers", {}):
-        click.echo("DML already configured in .claude/mcp.json")
-        return
-
-    # Add DML
-    config.setdefault("mcpServers", {}).update(dml_config)
-
-    if dry_run:
-        click.echo("Would add to .claude/mcp.json:")
-        click.echo(json.dumps(dml_config, indent=2))
+        click.echo("MCP server already configured")
+        mcp_installed = True
     else:
-        with open(config_path, "w") as f:
-            json.dump(config, f, indent=2)
-        click.echo(f"Added DML to {config_path}")
-        click.echo("Restart Claude Code to use DML tools.")
+        # Add DML
+        config.setdefault("mcpServers", {}).update(dml_config)
+
+        if dry_run:
+            click.echo("Would add to .claude/mcp.json:")
+            click.echo(json.dumps(dml_config, indent=2))
+        else:
+            with open(config_path, "w") as f:
+                json.dump(config, f, indent=2)
+            click.echo(f"Added DML MCP server to {config_path}")
+            mcp_installed = True
+
+    # === 2. Install Skill ===
+    skill_dir = Path.home() / ".claude" / "skills" / "dml"
+    skill_file = skill_dir / "SKILL.md"
+
+    skill_content = '''---
+name: dml
+description: Use DML (Deterministic Memory Layer) to track facts, constraints, and decisions. Invoke when helping with planning tasks, or when the user wants to track information with audit trails.
+---
+
+# Deterministic Memory Layer
+
+You have DML MCP tools available. Use them to track facts, constraints, and decisions.
+
+## Tools Available
+
+- **memory.add_fact**: Record facts (budget, destination, dates, preferences)
+- **memory.add_constraint**: Record requirements and restrictions
+- **memory.record_decision**: Record decisions with rationale
+- **memory.query**: Search memory before making recommendations
+- **memory.get_context**: Get full memory state
+- **memory.trace_provenance**: Trace where a fact came from
+- **memory.time_travel**: View memory at a past point
+- **memory.simulate_timeline**: "What if" counterfactual analysis
+
+## When to Use
+
+**Record facts immediately** when the user mentions:
+- Amounts (budget, prices) → `add_fact` key="budget"
+- Places (destination, locations) → `add_fact` key="destination"
+- Dates and times → `add_fact` key="dates"
+- Preferences → `add_fact` key="preference.<type>"
+
+**Record constraints** when the user expresses:
+- Requirements: "must have", "need", "require"
+- Restrictions: "can't", "won't", "avoid", "never"
+- Accessibility needs, dietary restrictions, etc.
+
+**Record decisions** when you:
+- Make a recommendation
+- Choose between options
+- Commit to a course of action
+
+**Query memory** before making recommendations to check for relevant constraints.
+
+## Example
+
+User: "My budget is $4000 and I need wheelchair accessible hotels"
+
+→ `memory.add_fact(key="budget", value="4000")`
+→ `memory.add_constraint(text="wheelchair accessible hotels required", priority="required")`
+
+Before recommending a hotel:
+→ `memory.query(question="accessibility requirements")`
+→ `memory.record_decision(text="Recommend Hotel X", rationale="Meets accessibility requirements")`
+'''
+
+    if skill_file.exists():
+        click.echo("Skill already installed")
+    elif dry_run:
+        click.echo(f"Would create skill at {skill_file}")
+    else:
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_file.write_text(skill_content)
+        click.echo(f"Added DML skill to {skill_file}")
+
+    if not dry_run and mcp_installed:
+        click.echo("")
+        click.echo("Restart Claude Code to use DML.")
+        click.echo("Then use /dml or just ask Claude to track facts!")
 
 
 @cli.command()
@@ -701,39 +775,6 @@ def live_demo() -> None:
     demo_dir.mkdir(parents=True, exist_ok=True)
     project_dir = Path(__file__).parent.parent.resolve()
 
-    # Create CLAUDE.md with instructions for using DML tools
-    claude_md = demo_dir / "CLAUDE.md"
-    claude_md.write_text('''# DML Demo - Travel Planning Assistant
-
-You are helping plan a trip. Use your DML (Deterministic Memory Layer) MCP tools to track everything.
-
-## When to use DML tools
-
-**Use `memory.add_fact`** whenever the user mentions:
-- Budget amounts → key="budget", value="<amount>"
-- Destinations → key="destination", value="<place>"
-- Travel dates → key="travel_dates", value="<dates>"
-- Number of travelers → key="travelers", value="<count>"
-- Preferences → key="preference.<type>", value="<preference>"
-
-**Use `memory.add_constraint`** when the user expresses:
-- Requirements ("must have", "need", "require")
-- Restrictions ("can't", "won't", "avoid")
-- Accessibility needs
-- Dietary restrictions
-
-**Use `memory.record_decision`** when you:
-- Recommend a specific hotel, flight, or activity
-- Make planning decisions
-
-**Use `memory.query`** to recall facts before making recommendations.
-
-## Important
-
-- Record facts AS SOON as the user mentions them - don't wait!
-- Always check constraints before making decisions
-- The user is watching a live memory monitor - make it interesting!
-''')
     uv_path = shutil.which("uv") or "uv"
     # Run dml from project directory but work in home directory
     dml_cmd = f"{uv_path} run --directory '{project_dir}' dml"
@@ -755,14 +796,14 @@ echo "  Chat with Claude about planning a trip to Japan."
 echo "  Watch the memory panel on the right update live!"
 echo ""
 echo "  Suggested flow:"
-echo "    1. Ask about trip to Japan, mention budget"
-echo "    2. Express interest in traditional ryokans"
-echo "    3. Later, mention wheelchair accessibility"
-echo "    4. Watch what happens to previous decisions!"
+echo "    1. Type: claude"
+echo "    2. Say: /dml help me plan a trip to Japan, budget \\$4000"
+echo "    3. Mention traditional ryokans, then wheelchair needs"
+echo "    4. Watch constraints block incompatible decisions!"
 echo ""
 echo "  ════════════════════════════════════════════════════"
 echo ""
-echo "  Type: claude    to start chatting"
+echo "  Type: claude    then use /dml to activate memory tracking"
 echo ""
 exec $SHELL
 '''
