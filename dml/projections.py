@@ -14,6 +14,8 @@ class FactProjection:
     value: Any
     confidence: float = 1.0
     source_event_id: int | None = None
+    supersedes_seq: int | None = None  # source_event_id of previous fact
+    previous_value: Any | None = None  # value being replaced
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -21,6 +23,8 @@ class FactProjection:
             "value": self.value,
             "confidence": self.confidence,
             "source_event_id": self.source_event_id,
+            "supersedes_seq": self.supersedes_seq,
+            "previous_value": self.previous_value,
         }
 
 
@@ -135,6 +139,8 @@ class ProjectionEngine:
                 value=payload.get("value"),
                 confidence=payload.get("confidence", 1.0),
                 source_event_id=event.global_seq,
+                supersedes_seq=payload.get("supersedes_seq"),
+                previous_value=payload.get("previous_value"),
             )
 
     def _apply_constraint_added(self, event: Event) -> None:
@@ -190,6 +196,8 @@ class ProjectionEngine:
                         value=item.get("value"),
                         confidence=item.get("confidence", 1.0),
                         source_event_id=event.global_seq,
+                        supersedes_seq=item.get("supersedes_seq"),
+                        previous_value=item.get("previous_value"),
                     )
             elif item_type == "constraint":
                 text = item.get("text")

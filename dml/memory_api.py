@@ -179,12 +179,42 @@ class MemoryAPI:
             del self._pending_proposals[proposal_id]
             return result
 
+        # Enrich items with supersession info
+        # Track in-batch updates for same-key handling
+        batch_facts: dict[str, tuple[int | None, Any]] = {}  # key -> (seq, value)
+
+        enriched_items = []
+        for item in proposal.items:
+            if item.get("type") == "fact":
+                key = item.get("key")
+                if not key:
+                    # Skip malformed fact items without key
+                    enriched_items.append(item)
+                    continue
+
+                enriched = {**item}
+
+                # Check in-batch first, then current state
+                if key in batch_facts:
+                    enriched["supersedes_seq"] = batch_facts[key][0]
+                    enriched["previous_value"] = batch_facts[key][1]
+                elif key in current_state.facts:
+                    existing = current_state.facts[key]
+                    enriched["supersedes_seq"] = existing.source_event_id
+                    enriched["previous_value"] = existing.value
+
+                enriched_items.append(enriched)
+                # Propagate supersedes_seq for subsequent same-key items in batch
+                batch_facts[key] = (enriched.get("supersedes_seq"), item.get("value"))
+            else:
+                enriched_items.append(item)
+
         # Commit the write
         event = Event(
             type=EventType.MemoryWriteCommitted,
             payload={
                 "proposal_id": proposal_id,
-                "items": proposal.items,
+                "items": enriched_items,
             },
             turn_id=turn_id,
             caused_by=proposal.source_event_id,
@@ -196,6 +226,113 @@ class MemoryAPI:
         del self._pending_proposals[proposal_id]
 
         return seq
+
+    def add_fact(
+        self,
+        key: str,
+        value: Any,
+        confidence: float = 1.0,
+        turn_id: int | None = None,
+        correlation_id: str | None = None,
+    ) -> int:
+        """
+        Add a fact with auto-detected supersession. Bypasses policy checks.
+
+        Use for simple audit-only writes. For policy-checked writes,
+        use propose_writes()/commit_writes() instead.
+
+        Args:
+            key: Fact key.
+            value: Fact value.
+            confidence: Confidence score (default 1.0).
+            turn_id: Current turn ID.
+            correlation_id: Correlation ID for provenance.
+
+        Returns:
+            Event sequence number.
+        """
+        current_state = self._get_current_state()
+
+        payload: dict[str, Any] = {
+            "key": key,
+            "value": value,
+            "confidence": confidence,
+        }
+
+        if key in current_state.facts:
+            existing = current_state.facts[key]
+            payload["supersedes_seq"] = existing.source_event_id
+            payload["previous_value"] = existing.value
+
+        event = Event(
+            type=EventType.FactAdded,
+            payload=payload,
+            turn_id=turn_id,
+            correlation_id=correlation_id,
+        )
+        return self.store.append(event)
+
+    def get_fact_history(self, key: str) -> list[FactProjection]:
+        """
+        Get all historical values for a fact key, oldest first.
+
+        Uses O(K) linked-list traversal via supersedes_seq chain,
+        where K is the number of historical values for this key.
+
+        Args:
+            key: Fact key to get history for.
+
+        Returns:
+            List of FactProjection instances, oldest first.
+        """
+        current_state = self._get_current_state()
+
+        if key not in current_state.facts:
+            return []
+
+        # Walk backwards via supersedes_seq chain (with loop guard)
+        history: list[FactProjection] = []
+        current = current_state.facts[key]
+        seen_seqs: set[int] = set()
+        MAX_HISTORY = 1000  # Defensive limit
+
+        while current and len(history) < MAX_HISTORY:
+            history.append(current)
+            if current.supersedes_seq is None:
+                break
+            if current.supersedes_seq in seen_seqs:
+                break  # Cycle detected
+            seen_seqs.add(current.supersedes_seq)
+
+            # Fetch the superseded event
+            event = self.store.get_event(current.supersedes_seq)
+            if not event:
+                break
+
+            # Handle both event types
+            if event.type == EventType.FactAdded:
+                payload = event.payload
+            elif event.type == EventType.MemoryWriteCommitted:
+                # Find the LAST fact item for this key (to match "last one wins" semantics)
+                items = event.payload.get("items", [])
+                matching = [i for i in items if i.get("type") == "fact" and i.get("key") == key]
+                fact_item = matching[-1] if matching else None
+                if not fact_item:
+                    break
+                payload = fact_item
+            else:
+                break
+
+            current = FactProjection(
+                key=key,
+                value=payload.get("value"),
+                confidence=payload.get("confidence", 1.0),
+                source_event_id=event.global_seq,
+                supersedes_seq=payload.get("supersedes_seq"),
+                previous_value=payload.get("previous_value"),
+            )
+
+        return list(reversed(history))  # Oldest first
 
     def trace_provenance(self, key: str) -> list[Event]:
         """

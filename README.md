@@ -351,7 +351,7 @@ deterministic-memory-layer/
 │   ├── FAQ.md           # Questions and answers
 │   ├── RESEARCH_NOTES.md
 │   └── DEMO_DESIGN.md
-├── tests/               # 80 tests covering core functionality
+├── tests/               # 99 tests covering core functionality
 ├── demo.py              # Demo scenario
 └── pyproject.toml
 ```

@@ -10,6 +10,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 from dml.events import Event, EventStore, EventType
+from dml.memory_api import MemoryAPI
 from dml.policy import PolicyEngine, WriteProposal
 from dml.projections import ProjectionEngine
 from dml.replay import ReplayEngine
@@ -27,6 +28,7 @@ def get_default_db_path() -> Path:
 store: EventStore | None = None
 replay_engine: ReplayEngine | None = None
 policy_engine: PolicyEngine | None = None
+memory_api: MemoryAPI | None = None
 
 
 def get_current_state():
@@ -244,16 +246,8 @@ def handle_add_fact(args: dict[str, Any]) -> dict[str, Any]:
         if previous_value != value:
             drift_alert = True
 
-    # Create and append event
-    event = Event(
-        type=EventType.FactAdded,
-        payload={
-            "key": key,
-            "value": value,
-            "confidence": confidence,
-        }
-    )
-    seq = store.append(event)
+    # Use MemoryAPI.add_fact for proper supersession tracking
+    seq = memory_api.add_fact(key, value, confidence)
 
     result = {
         "seq": seq,
@@ -568,7 +562,7 @@ def handle_simulate_timeline(args: dict[str, Any]) -> dict[str, Any]:
 
 def run_server(db_path: str | None = None) -> None:
     """Run the MCP server."""
-    global store, replay_engine, policy_engine
+    global store, replay_engine, policy_engine, memory_api
 
     # Initialize database
     if db_path is None:
@@ -577,6 +571,7 @@ def run_server(db_path: str | None = None) -> None:
     store = EventStore(db_path)
     replay_engine = ReplayEngine(store)
     policy_engine = PolicyEngine()
+    memory_api = MemoryAPI(store)
 
     # Optional Weave tracing
     init_tracing("dml-mcp-server")

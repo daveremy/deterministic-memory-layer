@@ -1,6 +1,6 @@
 # Deterministic Memory Layer (DML)
 
-Event-sourced memory layer for AI agents with deterministic replay.
+Event-driven memory layer for AI agents with deterministic replay.
 
 ## Project Overview
 
@@ -29,7 +29,7 @@ Events (append-only) → ProjectionEngine → Current State
 | `dml/projections.py` | Fact/Constraint/Decision projections, ProjectionEngine |
 | `dml/replay.py` | ReplayEngine for deterministic state reconstruction |
 | `dml/policy.py` | PolicyEngine for constraint enforcement |
-| `dml/memory_api.py` | Agent-facing API (search, propose, commit, trace, diff, drift) |
+| `dml/memory_api.py` | Agent-facing API (search, propose, commit, add_fact, get_fact_history, trace, diff, drift) |
 | `dml/tracing.py` | W&B Weave integration |
 | `cli.py` | Click CLI interface |
 | `demo.py` | Demo scenario showing full workflow |
@@ -106,6 +106,7 @@ Constraint patterns detected:
 - `test_projections.py`: Fact/constraint/decision building
 - `test_policy.py`: Constraint violation rejection
 - `test_memory_api.py`: Provenance chains, diff, drift metrics
+- `test_supersedes.py`: Fact history tracking via supersedes_seq chain
 
 ## Weave Integration
 

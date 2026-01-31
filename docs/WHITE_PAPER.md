@@ -187,6 +187,8 @@ ProjectionState:
 
 The `pending_verifications` set tracks which topics have been verified via memory queries, enabling procedural constraint enforcement.
 
+**Fact History via Supersession**: Each `FactProjection` includes a `supersedes_seq` field that points to the previous fact it replaced. This creates a linked-list structure enabling O(K) history traversal (where K is the number of updates to that fact) without replaying all events. When a fact is updated, the system automatically records which previous fact it supersedes and what value is being replaced. This enables queries like "what was the previous budget?" or "show me all values this fact has had" through efficient chain traversal rather than full event replay.
+
 ### 3.5 Policy Engine
 
 The policy engine intercepts every memory write and checks it against active constraints:
@@ -288,6 +290,7 @@ Preliminary benchmarks show:
 
 - **Event append**: < 1ms (SQLite insert)
 - **State reconstruction**: O(n) in event count
+- **Fact history lookup**: O(k) where k = number of updates to that fact
 - **Policy check**: < 5ms per constraint
 - **Memory footprint**: ~200 bytes per event
 
@@ -393,6 +396,10 @@ DML opens several avenues for future research. We organize these by theme: core 
 **Memory Lifecycle and Retention**: The tension between "append-only for auditability" and "delete for GDPR/privacy" requires principled resolution. Research directions include crypto-shredding (encrypt with per-user keys, delete keys to "forget"), tombstone semantics that preserve audit structure while removing content, and formal models of what "forgetting" means in an event-sourced system.
 
 **Constraint Learning from Demonstrations**: Rather than explicit programming, agents could infer constraints from expert behavior—if an expert always verifies inventory before promising delivery, induce that procedural constraint. This connects to inverse reinforcement learning and imitation learning, with the added challenge of producing interpretable, auditable constraint rules rather than opaque policies.
+
+**Entity Modeling and World Models**: Current DML facts are flat key-value pairs. Research is needed on structured entity modeling—treating `user.budget`, `user.preferences`, `user.constraints` as attributes of a coherent `user` entity. This connects to knowledge graph construction and raises questions about schema enforcement, entity resolution, and how agents should synthesize world models from scattered, partial facts. The brain excels at stitching coherent reality from limited, streaming sensory input—a cognitive science parallel that may offer insights for agent memory architectures.
+
+**Fact Key Consistency and Semantic Matching**: Reliable fact retrieval depends on consistent key naming (`user_budget` vs `budget` vs `user.budget`). Research directions include schema conventions, key normalization, and semantic fact matching—detecting that "budget is $3000" and "user has $3000 to spend" represent equivalent facts. Semantic matching necessarily breaks strict determinism but enables powerful analysis and deduplication.
 
 #### Distributed Memory Systems
 
