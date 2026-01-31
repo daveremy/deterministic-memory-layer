@@ -399,10 +399,48 @@ Before recommending a hotel:
         skill_file.write_text(skill_content)
         click.echo(f"Added DML skill to {skill_file}")
 
+    # === 3. Add to global CLAUDE.md ===
+    claude_md_path = Path.home() / ".claude" / "CLAUDE.md"
+    dml_marker = "<!-- DML:BEGIN -->"
+    dml_section = '''<!-- DML:BEGIN -->
+## Deterministic Memory Layer (DML)
+
+If DML MCP tools are available (`memory.add_fact`, `memory.add_constraint`, etc.), use them to track important information:
+
+- **Facts**: Record key facts (budgets, dates, names, preferences) with `memory.add_fact`
+- **Constraints**: Record requirements/restrictions with `memory.add_constraint`
+- **Decisions**: Record decisions with rationale using `memory.record_decision`
+
+Use these tools proactively - don't wait to be asked. Check `/mcp` to see if DML is available.
+<!-- DML:END -->'''
+
+    claude_md_installed = False
+    if claude_md_path.exists():
+        existing = claude_md_path.read_text()
+        if dml_marker in existing:
+            click.echo("Global CLAUDE.md already has DML section")
+            claude_md_installed = True
+        elif not dry_run:
+            # Append to end
+            with open(claude_md_path, "a") as f:
+                f.write("\n\n" + dml_section)
+            click.echo(f"Added DML section to {claude_md_path}")
+            claude_md_installed = True
+        else:
+            click.echo(f"Would add DML section to {claude_md_path}")
+    else:
+        if not dry_run:
+            claude_md_path.parent.mkdir(parents=True, exist_ok=True)
+            claude_md_path.write_text(dml_section)
+            click.echo(f"Created {claude_md_path} with DML section")
+            claude_md_installed = True
+        else:
+            click.echo(f"Would create {claude_md_path}")
+
     if not dry_run and mcp_installed:
         click.echo("")
         click.echo("Restart Claude Code to use DML.")
-        click.echo("Then use /dml or just ask Claude to track facts!")
+        click.echo("DML will now be used automatically in all conversations.")
 
 
 @cli.command()
