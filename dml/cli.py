@@ -284,63 +284,46 @@ def install(dry_run: bool) -> None:
     """Add DML MCP server and skill to Claude Code."""
     import shutil
 
-    # === 1. Install MCP Server ===
-    config_path = Path.home() / ".claude" / "mcp.json"
-
-    # Find uv and project directory for reliable execution
+    # === 1. Install MCP Server using claude mcp add ===
     uv_path = shutil.which("uv")
     if not uv_path:
         click.echo("Error: uv not found. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh")
         return
 
+    claude_path = shutil.which("claude")
+    if not claude_path:
+        click.echo("Error: claude not found. Install Claude Code first.")
+        return
+
     project_dir = str(Path(__file__).parent.parent.resolve())
 
-    # Use uv run for reliable environment handling
-    dml_config = {
-        "dml": {
-            "command": uv_path,
-            "args": ["run", "--directory", project_dir, "dml", "serve"],
-            "env": {}
-        }
-    }
+    # Check if already installed
+    import subprocess
+    result = subprocess.run(
+        [claude_path, "mcp", "list"],
+        capture_output=True,
+        text=True
+    )
 
     mcp_installed = False
-
-    # Load existing config or create new
-    if config_path.exists():
-        try:
-            with open(config_path) as f:
-                config = json.load(f)
-        except json.JSONDecodeError:
-            click.echo(f"Error: {config_path} contains invalid JSON")
-            return
-
-        # Backup before modifying
-        if not dry_run and "dml" not in config.get("mcpServers", {}):
-            backup_path = config_path.with_suffix(".json.backup")
-            shutil.copy(config_path, backup_path)
-            click.echo(f"Backed up existing config to {backup_path}")
-    else:
-        config = {"mcpServers": {}}
-        if not dry_run:
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Check if already installed (idempotent)
-    if "dml" in config.get("mcpServers", {}):
+    if "dml:" in result.stdout:
         click.echo("MCP server already configured")
         mcp_installed = True
-    else:
-        # Add DML
-        config.setdefault("mcpServers", {}).update(dml_config)
-
-        if dry_run:
-            click.echo("Would add to .claude/mcp.json:")
-            click.echo(json.dumps(dml_config, indent=2))
-        else:
-            with open(config_path, "w") as f:
-                json.dump(config, f, indent=2)
-            click.echo(f"Added DML MCP server to {config_path}")
+    elif not dry_run:
+        # Use claude mcp add with user scope
+        add_result = subprocess.run(
+            [claude_path, "mcp", "add", "--transport", "stdio", "--scope", "user", "dml",
+             "--", uv_path, "run", "--directory", project_dir, "dml", "serve"],
+            capture_output=True,
+            text=True
+        )
+        if add_result.returncode == 0:
+            click.echo("Added DML MCP server")
             mcp_installed = True
+        else:
+            click.echo(f"Failed to add MCP server: {add_result.stderr}")
+    else:
+        click.echo(f"Would run: claude mcp add --transport stdio --scope user dml -- {uv_path} run --directory {project_dir} dml serve")
 
     # === 2. Install Skill ===
     skill_dir = Path.home() / ".claude" / "skills" / "dml"
