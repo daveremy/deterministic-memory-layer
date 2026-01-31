@@ -1,6 +1,7 @@
 """CLI interface for Deterministic Memory Layer."""
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -645,9 +646,101 @@ def demo(ctx: click.Context) -> None:
 
 @cli.command("chat-demo")
 def chat_demo() -> None:
-    """Run the interactive chat demo with Clawde."""
+    """Run the scripted chat demo with ClawdMeister."""
     from dml.chat_demo import main
     main()
+
+
+@cli.command()
+@click.pass_context
+def monitor(ctx: click.Context) -> None:
+    """Live monitor showing memory state as it changes."""
+    from dml.monitor import main as monitor_main
+    db_path = ctx.obj["db_path"]
+    monitor_main(db_path)
+
+
+@cli.command("live-demo")
+def live_demo() -> None:
+    """Launch live demo with Claude Code + DML monitor in tmux."""
+    import shutil
+    import subprocess
+
+    # Check for tmux
+    if not shutil.which("tmux"):
+        click.echo("Error: tmux is required for live demo.")
+        click.echo("Install with: brew install tmux")
+        return
+
+    # Check if already in tmux
+    if os.environ.get("TMUX"):
+        click.echo("Already in tmux. Run these in separate panes:")
+        click.echo("  Pane 1: dml monitor")
+        click.echo("  Pane 2: claude")
+        return
+
+    # Reset the database for fresh demo
+    db_path = get_default_db_path()
+    if db_path.exists():
+        db_path.unlink()
+        click.echo(f"Reset database: {db_path}")
+
+    # Create tmux session with split panes
+    session_name = "dml-demo"
+
+    # Kill existing session if any
+    subprocess.run(["tmux", "kill-session", "-t", session_name],
+                   capture_output=True)
+
+    # Get the python path for running dml
+    python_path = sys.executable
+
+    # Create new session with monitor on right
+    subprocess.run([
+        "tmux", "new-session", "-d", "-s", session_name,
+        "-x", "200", "-y", "50"
+    ])
+
+    # Split vertically (left/right)
+    subprocess.run([
+        "tmux", "split-window", "-h", "-t", session_name
+    ])
+
+    # Right pane: run monitor
+    subprocess.run([
+        "tmux", "send-keys", "-t", f"{session_name}:0.1",
+        f"{python_path} -m dml monitor", "Enter"
+    ])
+
+    # Left pane: instructions then claude
+    instructions = (
+        "echo '🐱 DML Live Demo'; "
+        "echo '─────────────────────────────────────────'; "
+        "echo 'Chat with Claude about planning a trip to Japan.'; "
+        "echo 'Watch the memory panel on the right update live!'; "
+        "echo ''; "
+        "echo 'Try mentioning:'; "
+        "echo '  • Your budget'; "
+        "echo '  • Preference for traditional ryokans'; "
+        "echo '  • Accessibility requirements (wheelchair)'; "
+        "echo ''; "
+        "echo 'Press Enter to start Claude...'; "
+        "read; "
+        "claude"
+    )
+    subprocess.run([
+        "tmux", "send-keys", "-t", f"{session_name}:0.0",
+        instructions, "Enter"
+    ])
+
+    # Resize panes (70/30 split)
+    subprocess.run([
+        "tmux", "resize-pane", "-t", f"{session_name}:0.0", "-x", "70%"
+    ])
+
+    # Attach to session
+    click.echo("Launching tmux session...")
+    subprocess.run(["tmux", "attach-session", "-t", session_name])
 
 
 @cli.command()
