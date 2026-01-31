@@ -48,6 +48,27 @@ def init(ctx: click.Context) -> None:
 
 
 @cli.command()
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation prompt")
+@click.pass_context
+def reset(ctx: click.Context, force: bool) -> None:
+    """Clear all memory (reset database for fresh demo)."""
+    db_path = ctx.obj["db_path"]
+
+    if not Path(db_path).exists():
+        click.echo("No memory store to reset.")
+        return
+
+    if not force:
+        click.confirm(f"This will delete all events in {db_path}. Continue?", abort=True)
+
+    # Delete and recreate
+    Path(db_path).unlink()
+    store = EventStore(db_path)
+    store.close()
+    click.echo(f"Memory reset. Fresh database at {db_path}")
+
+
+@cli.command()
 @click.argument("event_type")
 @click.argument("payload")
 @click.option("--turn-id", type=int, help="Turn ID for the event.")
