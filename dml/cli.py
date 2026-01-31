@@ -665,6 +665,7 @@ def live_demo() -> None:
     """Launch live demo with Claude Code + DML monitor in tmux."""
     import shutil
     import subprocess
+    import time as time_module
 
     # Check for tmux
     if not shutil.which("tmux"):
@@ -675,8 +676,8 @@ def live_demo() -> None:
     # Check if already in tmux
     if os.environ.get("TMUX"):
         click.echo("Already in tmux. Run these in separate panes:")
-        click.echo("  Pane 1: dml monitor")
-        click.echo("  Pane 2: claude")
+        click.echo("  Pane 1 (left):  claude")
+        click.echo("  Pane 2 (right): uv run dml monitor")
         return
 
     # Reset the database for fresh demo
@@ -685,61 +686,91 @@ def live_demo() -> None:
         db_path.unlink()
         click.echo(f"Reset database: {db_path}")
 
+    # Initialize empty database
+    store = EventStore(str(db_path))
+    store.close()
+
     # Create tmux session with split panes
     session_name = "dml-demo"
 
     # Kill existing session if any
     subprocess.run(["tmux", "kill-session", "-t", session_name],
-                   capture_output=True)
+                   capture_output=True, check=False)
 
-    # Get the python path for running dml
-    python_path = sys.executable
+    # Get paths
+    project_dir = Path(__file__).parent.parent
+    uv_path = shutil.which("uv") or "uv"
 
-    # Create new session with monitor on right
+    # Create new session
     subprocess.run([
         "tmux", "new-session", "-d", "-s", session_name,
-        "-x", "200", "-y", "50"
-    ])
+        "-c", str(project_dir)
+    ], check=True)
 
-    # Split vertically (left/right)
+    # Split vertically (left/right) - right pane for monitor
     subprocess.run([
-        "tmux", "split-window", "-h", "-t", session_name
-    ])
+        "tmux", "split-window", "-h", "-t", session_name,
+        "-c", str(project_dir)
+    ], check=True)
 
-    # Right pane: run monitor
+    # Resize: left pane 70%, right pane 30%
+    subprocess.run([
+        "tmux", "resize-pane", "-t", f"{session_name}:0.1", "-x", "40"
+    ], check=True)
+
+    time_module.sleep(0.3)
+
+    # Right pane (pane 1): run monitor
     subprocess.run([
         "tmux", "send-keys", "-t", f"{session_name}:0.1",
-        f"{python_path} -m dml monitor", "Enter"
-    ])
+        f"cd {project_dir} && {uv_path} run dml monitor", "Enter"
+    ], check=True)
 
-    # Left pane: instructions then claude
-    instructions = (
-        "echo '🐱 DML Live Demo'; "
-        "echo '─────────────────────────────────────────'; "
-        "echo 'Chat with Claude about planning a trip to Japan.'; "
-        "echo 'Watch the memory panel on the right update live!'; "
-        "echo ''; "
-        "echo 'Try mentioning:'; "
-        "echo '  • Your budget'; "
-        "echo '  • Preference for traditional ryokans'; "
-        "echo '  • Accessibility requirements (wheelchair)'; "
-        "echo ''; "
-        "echo 'Press Enter to start Claude...'; "
-        "read; "
-        "claude"
-    )
+    time_module.sleep(0.3)
+
+    # Left pane (pane 0): show instructions
     subprocess.run([
         "tmux", "send-keys", "-t", f"{session_name}:0.0",
-        instructions, "Enter"
-    ])
+        "clear", "Enter"
+    ], check=True)
 
-    # Resize panes (70/30 split)
+    time_module.sleep(0.2)
+
+    # Send instructions line by line
+    instructions = [
+        "echo ''",
+        "echo '  🐱 DML Live Demo'",
+        "echo '  ════════════════════════════════════════════════════'",
+        "echo ''",
+        "echo '  Chat with Claude about planning a trip to Japan.'",
+        "echo '  Watch the memory panel on the right update live!'",
+        "echo ''",
+        "echo '  Suggested conversation flow:'",
+        "echo '    1. Ask about trip to Japan, mention budget'",
+        "echo '    2. Express interest in traditional ryokans'",
+        "echo '    3. Later, mention wheelchair accessibility needs'",
+        "echo '    4. Watch what happens to previous decisions!'",
+        "echo ''",
+        "echo '  ════════════════════════════════════════════════════'",
+        "echo ''",
+        "echo '  Type: claude    to start chatting'",
+        "echo ''",
+    ]
+
+    for line in instructions:
+        subprocess.run([
+            "tmux", "send-keys", "-t", f"{session_name}:0.0",
+            line, "Enter"
+        ], check=True)
+
+    # Select left pane
     subprocess.run([
-        "tmux", "resize-pane", "-t", f"{session_name}:0.0", "-x", "70%"
-    ])
+        "tmux", "select-pane", "-t", f"{session_name}:0.0"
+    ], check=True)
 
     # Attach to session
     click.echo("Launching tmux session...")
+    click.echo("Type 'claude' in the left pane to start chatting!")
     subprocess.run(["tmux", "attach-session", "-t", session_name])
 
 
