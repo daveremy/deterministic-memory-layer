@@ -331,6 +331,220 @@ def install(dry_run: bool) -> None:
 
 
 @cli.command()
+@click.pass_context
+def view(ctx: click.Context) -> None:
+    """View current memory state with Rich terminal UI."""
+    from dml.visualization import DMLVisualization, DecisionEntry
+
+    db_path = ctx.obj["db_path"]
+    store = EventStore(db_path)
+    engine = ReplayEngine(store)
+    state = engine.replay_to()
+
+    viz = DMLVisualization("DML Memory State")
+
+    # Convert state to visualization format
+    facts = {
+        key: {"value": fact.value}
+        for key, fact in state.facts.items()
+    }
+
+    constraints = [
+        {
+            "text": c.text,
+            "priority": c.priority,
+            "active": c.active,
+            "triggered_by": c.triggered_by,
+        }
+        for c in state.constraints.values()
+    ]
+
+    decisions = [
+        {
+            "text": d.text,
+            "status": d.status,
+            "seq": d.source_event_id,
+        }
+        for d in state.decisions
+    ]
+
+    # Build decision ledger
+    ledger = []
+    for d in state.decisions:
+        ledger.append(DecisionEntry(
+            seq=d.source_event_id or 0,
+            text=d.text,
+            status="BLOCKED" if d.status == "blocked" else "ALLOWED",
+            constraint=None,  # Would need to track this separately
+        ))
+
+    viz.main_view(
+        current_seq=state.last_seq,
+        facts=facts,
+        constraints=constraints,
+        decisions=decisions,
+        decision_ledger=ledger,
+    )
+
+    store.close()
+
+
+@cli.command()
+@click.pass_context
+def demo(ctx: click.Context) -> None:
+    """Run the travel agent demo scenario."""
+    from dml.visualization import DMLVisualization, DecisionEntry
+    from dml.policy import PolicyEngine, WriteProposal
+    import time
+
+    # Use temp DB for demo
+    demo_db = "/tmp/dml_demo.db"
+    if Path(demo_db).exists():
+        Path(demo_db).unlink()
+
+    store = EventStore(demo_db)
+    api = MemoryAPI(store)
+    engine = ReplayEngine(store)
+    policy = PolicyEngine()
+    viz = DMLVisualization("DML: Self-Improving Travel Agent")
+
+    def show_state():
+        state = engine.replay_to()
+        facts = {k: {"value": f.value} for k, f in state.facts.items()}
+        constraints = [
+            {"text": c.text, "priority": c.priority, "active": c.active, "triggered_by": c.triggered_by}
+            for c in state.constraints.values()
+        ]
+        decisions = [
+            {"text": d.text, "status": d.status, "seq": d.source_event_id}
+            for d in state.decisions
+        ]
+        ledger = [
+            DecisionEntry(d.source_event_id or 0, d.text,
+                         "BLOCKED" if d.status == "blocked" else "ALLOWED", None)
+            for d in state.decisions
+        ]
+        viz.main_view(state.last_seq, facts, constraints, decisions, decision_ledger=ledger)
+
+    click.echo("Starting DML Demo: Self-Improving Travel Agent\n")
+    time.sleep(1)
+
+    # Act 1: Setup
+    click.echo("Act 1: User states requirements...")
+    api.add_fact("destination", "Japan")
+    api.add_fact("duration", "10 days")
+    api.add_fact("budget", 4000)
+    show_state()
+    click.pause("Press Enter to continue...")
+
+    # Act 2: First decision
+    click.echo("\nAct 2: Agent books ryokan...")
+    store.append(Event(
+        type=EventType.ConstraintAdded,
+        payload={"text": "prefer traditional ryokan accommodations", "priority": "preferred"}
+    ))
+
+    # Decision passes
+    store.append(Event(
+        type=EventType.DecisionMade,
+        payload={"text": "Book Ryokan Kurashiki - $180/night", "status": "committed"}
+    ))
+    show_state()
+    click.pause("Press Enter to continue...")
+
+    # Act 3: Drift
+    click.echo("\nAct 3: Budget changes (drift!)...")
+    api.add_fact("budget", 3000)
+    viz.show_drift_alert("budget", "$4000", "$3000", ["Ryokan Kurashiki ($180/night)"])
+    click.pause("Press Enter to continue...")
+
+    # Act 4: The Block
+    click.echo("\nAct 4: Wheelchair constraint blocks the booking...")
+    constraint_seq = store.append(Event(
+        type=EventType.ConstraintAdded,
+        payload={"text": "wheelchair accessible rooms required", "priority": "required"}
+    ))
+
+    # This decision gets blocked
+    store.append(Event(
+        type=EventType.DecisionMade,
+        payload={"text": "Keep Ryokan Kurashiki booking", "status": "blocked"}
+    ))
+    viz.show_blocked(
+        "Keep Ryokan Kurashiki booking",
+        "wheelchair accessible rooms required",
+        constraint_seq,
+        "Traditional ryokan has stairs, no elevator"
+    )
+    click.pause("Press Enter to continue...")
+
+    # Act 5: Learning
+    click.echo("\nAct 5: Agent learns a new constraint...")
+    state = engine.replay_to()
+    store.append(Event(
+        type=EventType.ConstraintAdded,
+        payload={
+            "text": "verify accessibility BEFORE recommending accommodations",
+            "priority": "learned",
+            "triggered_by": state.last_seq,
+        }
+    ))
+    viz.show_learned("verify accessibility BEFORE recommending", state.last_seq)
+    show_state()
+    click.pause("Press Enter to continue...")
+
+    # Act 6: Double-tap
+    click.echo("\nAct 6: Agent tries to book without verifying (blocked!)...")
+    store.append(Event(
+        type=EventType.DecisionMade,
+        payload={"text": "Book Hotel Granvia Kyoto", "status": "blocked"}
+    ))
+    viz.show_blocked(
+        "Book Hotel Granvia Kyoto",
+        "verify accessibility BEFORE recommending",
+        state.last_seq + 1,
+        "Must verify accessibility before booking, even if hotel is accessible"
+    )
+    click.pause("Press Enter to continue...")
+
+    click.echo("\nAgent verifies and tries again...")
+    store.append(Event(
+        type=EventType.MemoryQueryIssued,
+        payload={"question": "Is Hotel Granvia wheelchair accessible?"}
+    ))
+    store.append(Event(
+        type=EventType.DecisionMade,
+        payload={"text": "Book Hotel Granvia - VERIFIED accessible", "status": "committed"}
+    ))
+    show_state()
+    click.pause("Press Enter to continue...")
+
+    # Act 7: Fork the Future
+    click.echo("\nAct 7: Fork the Future - what if constraint came earlier?")
+    viz.timeline_split(
+        timeline_a={
+            "constraint_seq": constraint_seq,
+            "decisions": [
+                {"seq": 4, "text": "Ryokan Kurashiki", "status": "ALLOWED"},
+                {"seq": 6, "text": "Keep Ryokan", "status": "BLOCKED"},
+            ],
+            "summary": "Pain discovered LATE - user had to complain",
+        },
+        timeline_b={
+            "decisions": [
+                {"seq": 4, "text": "Ryokan Kurashiki", "status": "BLOCKED"},
+            ],
+            "summary": "Pain PREVENTED - constraint caught it early",
+        },
+        injected_constraint="wheelchair accessible",
+        injected_at_seq=2,
+    )
+
+    click.echo("\n Demo complete!")
+    store.close()
+
+
+@cli.command()
 @click.option("--init", "do_init", is_flag=True, help="Initialize DB if it doesn't exist")
 def serve(do_init: bool) -> None:
     """Start the DML MCP server."""
