@@ -573,9 +573,16 @@ def run_server(db_path: str | None = None) -> None:
     policy_engine = PolicyEngine()
     memory_api = MemoryAPI(store)
 
-    # Optional Weave tracing
-    init_tracing("dml-mcp-server")
+    # Optional Weave tracing - skip if not logged in (don't block on interactive prompt)
+    import os
+    if os.environ.get("WANDB_API_KEY") or os.environ.get("WEAVE_PROJECT"):
+        init_tracing("dml-mcp-server")
 
     # Run server
     import asyncio
-    asyncio.run(stdio_server(server).serve())
+
+    async def main():
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(read_stream, write_stream, server.create_initialization_options())
+
+    asyncio.run(main())
