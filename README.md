@@ -4,37 +4,105 @@
 
 Built for [WeaveHacks 3](https://lu.ma/weavehacks3) (Jan 31 - Feb 1, 2026)
 
+---
+
+## Table of Contents
+
+- [The Idea](#the-idea)
+- [The Problem](#the-problem)
+- [The Approach](#the-approach)
+- [How It Works](#how-it-works)
+  - [Event-Driven Memory](#event-driven-memory)
+  - [Self-Improvement Loop](#self-improvement-loop)
+  - [Policy Enforcement](#policy-enforcement)
+- [Architecture](#architecture)
+  - [Core Components](#core-components)
+  - [Protocol Integration (MCP)](#protocol-integration-mcp)
+  - [Observability Integration](#observability-integration)
+- [Getting Started](#getting-started)
+  - [Installation](#installation)
+  - [Quick Example](#quick-example)
+  - [CLI Commands](#cli-commands)
+- [Documentation](#documentation)
+- [Project Structure](#project-structure)
+- [Acknowledgments](#acknowledgments)
+
+---
+
 ## The Idea
 
 LLMs are inherently stochastic—you can't make their outputs deterministic. But **memory is a different substrate**. The facts an agent knows, the constraints it operates under, the relationships it tracks—these don't need to be a blob appended to context. They can be structured, versioned, and deterministic.
 
-Current approaches treat agent memory as unstructured text for retrieval. DML explores whether treating memory as a **first-class system**—with its own guarantees—improves reliability:
+Current approaches treat agent memory as unstructured text optimized for retrieval. DML explores whether treating memory as a **first-class system**—with its own guarantees—improves agent reliability.
 
-- **Reproducibility**: Replay to the exact memory state when a decision was made
-- **Accountability**: Trace why the agent believed a specific fact
-- **Consistency**: Detect contradictions before they cause problems
-- **Learning**: Turn mistakes into constraints that prevent recurrence
+---
+
+## The Problem
+
+AI agents are moving from experiments to production, but current memory architectures have fundamental limitations:
+
+| Problem | Description |
+|---------|-------------|
+| **Memory Drift** | Agent state gradually diverges from intended behavior as contradictions accumulate undetected |
+| **Non-Reproducibility** | Can't debug what you can't replay—reproducing the exact state that led to a decision is often impossible |
+| **Accountability Gap** | When agents make autonomous decisions, organizations can't answer "why did it do that?" |
+| **No Learning Loop** | Mistakes aren't captured as prevention mechanisms; agents repeat the same errors |
+
+Existing memory systems (MemGPT/Letta, Mem0, A-Mem, LangChain Memory) focus on *retrieval*—how to find relevant memories. DML focuses on *reliability*—how to ensure memories are consistent, auditable, and enforceable.
+
+---
 
 ## The Approach
 
-DML uses **event-driven memory**—adapting event sourcing from distributed systems. Facts, constraints, and decisions are recorded as immutable events. Current state is always derived by replaying events.
+DML uses **event-driven memory**—adapting event sourcing from distributed systems to agent memory:
 
-**Core capabilities:**
+- **Events are the source of truth**: Current state is derived by replaying events, not stored directly
+- **Append-only**: Events are never modified or deleted; corrections create new events
+- **Deterministic replay**: Same events always produce the same state
 
-1. **Deterministic Replay**: Same events → same state (always)
-2. **Policy Enforcement**: Check constraints on every write
-3. **Self-Improvement**: Learn constraints from mistakes
-4. **Counterfactual Analysis**: "What if this constraint existed earlier?"
-5. **Provenance Tracking**: Trace any fact to its origin
+This enables capabilities that mutable memory cannot provide:
 
-## Self-Improvement Loop
+| Capability | Description |
+|------------|-------------|
+| **Time Travel** | Replay to the exact memory state when any decision was made |
+| **Provenance** | Trace any fact back through the chain of events that established it |
+| **Counterfactuals** | "What if this constraint existed earlier?" - replay with modifications |
+| **Audit Trail** | Complete history of every memory change, forever |
+
+---
+
+## How It Works
+
+### Event-Driven Memory
+
+Every memory operation is recorded as an immutable event:
+
+```python
+# Events capture what happened, not current state
+Event(type=FactAdded, payload={"key": "user.budget", "value": 3000})
+Event(type=ConstraintAdded, payload={"text": "Verify accessibility before booking hotels"})
+Event(type=DecisionMade, payload={"action": "book_hotel", "rationale": "..."})
+```
+
+Current state is always derived by replaying events through projections:
+
+```python
+# Replay events to get current state
+engine = ReplayEngine(event_store)
+state = engine.replay_to(seq=50)  # State at event 50
+
+# Or exclude events for counterfactual analysis
+alt_state = engine.replay_excluding([42, 43])  # "What if events 42-43 never happened?"
+```
+
+### Self-Improvement Loop
 
 DML enables a closed loop from mistake to prevention:
 
 ```text
 Agent makes decision → Decision has bad outcome
                               ↓
-                    DML records what happened
+                    DML records what happened (event)
                               ↓
                     Agent reviews history (replay)
                               ↓
@@ -43,64 +111,101 @@ Agent makes decision → Decision has bad outcome
                     Next time: Policy blocks Y without X
 ```
 
-Structured memory makes this possible—you can't improve if you can't remember what went wrong.
+Constraints are themselves events—the agent's learned rules become part of its auditable history.
 
-## Quick Start
+### Policy Enforcement
 
-```bash
-# Install
-uv sync
+The policy engine intercepts every memory write and checks it against active constraints:
 
-# Initialize memory store
-python cli.py init
+```python
+# Constraint: "Never recommend products containing nuts"
+# Attempted write: "Recommend trail mix for the hiking trip"
 
-# Add a constraint
-python cli.py append ConstraintAdded '{"text": "Never use eval()"}'
-
-# View current state
-python cli.py replay
-
-# Run the demo
-python demo.py
-
-# Run tests (80 tests)
-pytest tests/
+result = policy_engine.check(proposed_write, active_constraints)
+# result.allowed = False
+# result.violated = ["Never recommend products containing nuts"]
 ```
+
+**Constraint Types**:
+- **Required**: Always enforced (e.g., "Never share personal data")
+- **Preferred**: Advisory, not blocking (e.g., "Prefer morning meetings")
+- **Learned**: Added from past mistakes, enforced going forward
+
+**Pattern Detection**:
+- Prohibition: "never X", "do not X", "avoid X" → blocks writes containing X
+- Procedural: "verify X before Y" → requires X was queried before Y proceeds
+
+---
 
 ## Architecture
 
+### Core Components
+
 ```text
-┌─────────────────┐     MCP Tools      ┌─────────────────┐
-│                 │ ◄────────────────► │                 │
-│  Claude/Agent   │  memory.add_fact   │   DML Server    │
-│                 │  memory.constrain  │                 │
-│                 │  memory.decide     │  Event Store    │
-└─────────────────┘  memory.query      └────────┬────────┘
-                                                │
-                                         Events │ (append-only)
-                                                ▼
-┌─────────────────┐                    ┌─────────────────┐
-│  Observability  │ ◄───── spans ───── │   Projections   │
-│  (Weave, etc.)  │                    ├─────────────────┤
-│                 │                    │ • Facts         │
-│  Events ≅ Spans │                    │ • Constraints   │
-└─────────────────┘                    │ • Decisions     │
-                                       └─────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                         Agent (Claude, etc.)                     │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ MCP Tools
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         DML Server                               │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │  MemoryAPI  │  │   Policy    │  │   Replay    │             │
+│  │             │  │   Engine    │  │   Engine    │             │
+│  │ • search    │  │             │  │             │             │
+│  │ • propose   │  │ • check     │  │ • replay_to │             │
+│  │ • commit    │  │ • enforce   │  │ • excluding │             │
+│  │ • trace     │  │             │  │ • inject    │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
+│         │                │                │                     │
+│         └────────────────┴────────────────┘                     │
+│                          │                                      │
+│                          ▼                                      │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                    Event Store                           │   │
+│  │            (SQLite + WAL / Redis Streams)                │   │
+│  │                                                          │   │
+│  │  [Event 1] → [Event 2] → [Event 3] → ... (append-only)  │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ Spans (isomorphic)
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Observability (Weave, etc.)                    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## Core Concepts
+| Component | Purpose |
+|-----------|---------|
+| **Event Store** | Append-only storage for immutable events (SQLite default, Redis planned) |
+| **Projection Engine** | Derives current state (facts, constraints, decisions) from events |
+| **Replay Engine** | Reconstructs state at any point; supports counterfactual analysis |
+| **Policy Engine** | Enforces constraints on every write; blocks violations |
+| **Memory API** | Agent-facing interface for search, propose, commit, trace, diff |
 
-| Concept | Description |
-|---------|-------------|
-| **Event** | Immutable record of something that happened (fact learned, constraint added, decision made) |
-| **Projection** | Current state derived from replaying events |
-| **Policy** | Rules that gate commits (reject decisions violating constraints) |
-| **Provenance** | Chain of `caused_by` links tracing state to origin |
-| **Constraint** | Required, preferred, or learned rule governing behavior |
+### Protocol Integration (MCP)
 
-## Observability Integration
+DML is designed as an **MCP server**—it provides tools that AI agents can call.
 
-DML events are **isomorphic to distributed tracing spans**:
+**What is MCP?** The [Model Context Protocol](https://modelcontextprotocol.io/) (Anthropic) is a standard for connecting AI agents to external tools and data sources. When an agent needs to access a database, API, or service, MCP provides the interface.
+
+**DML MCP Tools**:
+
+| Tool | Description |
+|------|-------------|
+| `memory.add_fact` | Record a fact with confidence score |
+| `memory.add_constraint` | Add a behavioral constraint |
+| `memory.decide` | Record a decision with rationale |
+| `memory.query` | Search memory for relevant facts |
+| `memory.replay` | Reconstruct state at a specific point |
+
+**Future Protocol Support**: As agent ecosystems evolve, DML could integrate with agent-to-agent protocols like [A2A](https://github.com/google/a2a) (Google/Linux Foundation) for multi-agent memory sharing scenarios.
+
+### Observability Integration
+
+DML events are **structurally isomorphic to distributed tracing spans**:
 
 | DML Event | Observability Span |
 |-----------|-------------------|
@@ -110,72 +215,160 @@ DML events are **isomorphic to distributed tracing spans**:
 | `type` | Operation name |
 | `payload` | Span attributes |
 
-This enables unified visibility: observability tools trace LLM behavior, DML tracks memory state—together, full visibility into both what the agent did and what it knew.
+This means DML integrates naturally with observability platforms like [Weights & Biases Weave](https://wandb.ai/site/weave). When enabled, every event append becomes a span, constraint violations become errors, and the full memory operation history is visible in your tracing dashboard.
 
-## Project Structure
+**Together, they answer different questions**:
+- Observability: "What did the LLM do?" (calls, latencies, token usage)
+- DML: "What did the agent know?" (facts, constraints, decisions)
 
-```
-deterministic-memory-layer/
-├── dml/
-│   ├── events.py        # Event types + SQLite EventStore
-│   ├── stores.py        # Store backends (SQLite, Redis stub)
-│   ├── projections.py   # Fact/Constraint/Decision projections
-│   ├── replay.py        # Deterministic replay engine
-│   ├── policy.py        # Constraint enforcement
-│   ├── memory_api.py    # Agent-facing API
-│   ├── tracing.py       # Observability integration
-│   └── server.py        # MCP server
-├── cli.py               # CLI interface
-├── demo.py              # Demo scenario
-├── docs/                # Documentation
-└── tests/               # 80 tests
+---
+
+## Getting Started
+
+### Installation
+
+DML requires Python 3.11+ and uses [uv](https://github.com/astral-sh/uv) for dependency management.
+
+```bash
+# Clone the repository
+git clone https://github.com/daveremy/deterministic-memory-layer.git
+cd deterministic-memory-layer
+
+# Install dependencies
+uv sync
+
+# (Alternative: pip install)
+pip install -e .
 ```
 
-## CLI Commands
+### Quick Example
 
+```python
+from dml import EventStore, Event, EventType, ReplayEngine, PolicyEngine, MemoryAPI
+
+# Initialize
+store = EventStore("agent_memory.db")
+memory = MemoryAPI(store)
+
+# Add a constraint (recorded as event)
+memory.add_constraint("Never recommend products containing nuts", priority="required")
+
+# Add facts
+memory.add_fact("user.allergy", "tree nuts", confidence=1.0)
+memory.add_fact("user.preference", "healthy snacks", confidence=0.8)
+
+# Propose a write - policy engine checks constraints
+proposal_id, violations = memory.propose_writes([
+    {"type": "recommendation", "content": "Try our new trail mix!"}
+])
+
+if violations:
+    print(f"Blocked: {violations}")  # ["Never recommend products containing nuts"]
+else:
+    memory.commit_writes(proposal_id)
+
+# Time travel: what was the state at event 5?
+replay = ReplayEngine(store)
+past_state = replay.replay_to(seq=5)
+
+# Provenance: why does the agent believe this?
+chain = memory.trace_provenance("user.allergy")
+# Returns: [Event that established the fact, Event that caused it, ...]
 ```
-dml init                    Create new memory store
-dml append <type> <json>    Add event
-dml replay [--to N]         Show state at point in time
-dml replay --exclude 3,5    Counterfactual: state without events 3 and 5
-dml query <search>          Search facts
-dml trace <key>             Show provenance chain
-dml diff <seq1> <seq2>      Compare states
-dml drift <seq1> <seq2>     Measure drift metrics
-dml eval                    Run evaluation workflow
+
+### CLI Commands
+
+```bash
+# Initialize a new memory store
+python -m dml init
+
+# Add events
+python -m dml append FactAdded '{"key": "user.name", "value": "Alice"}'
+python -m dml append ConstraintAdded '{"text": "Always greet by name"}'
+
+# View current state
+python -m dml replay
+
+# Time travel to specific point
+python -m dml replay --to 5
+
+# Counterfactual: state without events 3 and 5
+python -m dml replay --exclude 3,5
+
+# Search memory
+python -m dml query "user preferences"
+
+# Trace provenance
+python -m dml trace user.name
+
+# Compare states
+python -m dml diff 10 20
+
+# Measure drift
+python -m dml drift 1 100
+
+# Run demo scenario
+python demo.py
+
+# Run tests
+pytest tests/ -v
 ```
+
+---
 
 ## Documentation
 
 ### Core Documents
-- **[White Paper](docs/WHITE_PAPER.md)** - Full technical paper on DML architecture, implementation, and future research directions
-- **[FAQ](docs/FAQ.md)** - Tough questions and honest answers about DML's claims, limitations, and trade-offs
+
+| Document | Description |
+|----------|-------------|
+| **[White Paper](docs/WHITE_PAPER.md)** | Full technical paper: architecture, implementation, evaluation, future research |
+| **[FAQ](docs/FAQ.md)** | Tough questions and honest answers about claims, limitations, trade-offs |
 
 ### Supporting Materials
-- **[Research Notes](docs/RESEARCH_NOTES.md)** - Literature review and references supporting the white paper
-- **[Demo Design](docs/DEMO_DESIGN.md)** - Demo scenario design and walkthrough
-- **[CLAUDE.md](CLAUDE.md)** - Project instructions for Claude Code
-- **[agents.md](agents.md)** - Headless AI assistant integration guide
 
-## Key Features
+| Document | Description |
+|----------|-------------|
+| **[Research Notes](docs/RESEARCH_NOTES.md)** | Literature review and references |
+| **[Demo Design](docs/DEMO_DESIGN.md)** | Demo scenario walkthrough |
+| **[CLAUDE.md](CLAUDE.md)** | Development instructions |
 
-- **Event Sourcing**: All mutations captured as immutable events
-- **Deterministic Replay**: Rebuild state from any point in history
-- **Policy Enforcement**: Block constraint violations before commit
-- **Procedural Constraints**: "Verify X before Y" enforcement
-- **Counterfactual Analysis**: "What if this constraint existed?"
-- **Provenance Tracking**: Trace any fact to its origin
-- **Drift Measurement**: Quantify state changes over time
-- **Observability**: Event-span isomorphism for unified tracing
-- **Pluggable Backends**: SQLite (default), Redis (planned)
+---
+
+## Project Structure
+
+```text
+deterministic-memory-layer/
+├── dml/
+│   ├── events.py        # Event types + SQLite EventStore
+│   ├── stores.py        # Store backend abstraction (SQLite, Redis stub)
+│   ├── projections.py   # Fact/Constraint/Decision projections
+│   ├── replay.py        # Deterministic replay engine
+│   ├── policy.py        # Constraint enforcement
+│   ├── memory_api.py    # Agent-facing API
+│   ├── tracing.py       # Observability integration (Weave)
+│   └── server.py        # MCP server
+├── docs/
+│   ├── WHITE_PAPER.md   # Technical paper
+│   ├── FAQ.md           # Questions and answers
+│   ├── RESEARCH_NOTES.md
+│   └── DEMO_DESIGN.md
+├── tests/               # 80 tests covering core functionality
+├── demo.py              # Demo scenario
+└── pyproject.toml
+```
+
+---
 
 ## Acknowledgments
 
 Built during WeaveHacks 3, sponsored by:
-- [Weights & Biases](https://wandb.ai/) (Weave)
-- [Redis](https://redis.io/)
+- [Weights & Biases](https://wandb.ai/) (Weave) - Observability integration
+- [Redis](https://redis.io/) - Event store backend design
 - [Daily](https://www.daily.co/) (Pipecat)
 - [Browserbase](https://browserbase.com/)
+
+---
 
 ## License
 
