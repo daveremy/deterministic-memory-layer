@@ -93,17 +93,21 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="record_decision",
-            description="Record a decision you're making. AUTO-CHECKS ALL CONSTRAINTS. Will be BLOCKED if decision violates any constraint.",
+            description="Record a decision or user confirmation. AUTO-CHECKS ALL CONSTRAINTS. Will be BLOCKED if decision violates any constraint.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "text": {
                         "type": "string",
-                        "description": "What you're deciding (e.g., 'Book Hotel Granvia Kyoto')"
+                        "description": "What's being decided (e.g., 'Book Hotel Granvia Kyoto')"
                     },
                     "rationale": {
                         "type": "string",
-                        "description": "Why this decision satisfies constraints"
+                        "description": "Why this decision was made"
+                    },
+                    "topic": {
+                        "type": "string",
+                        "description": "Category: dates, accommodation, transportation, itinerary, budget, etc."
                     },
                     "references": {
                         "type": "array",
@@ -297,6 +301,7 @@ def handle_record_decision(args: dict[str, Any]) -> dict[str, Any]:
     """Handle record_decision tool with policy enforcement."""
     text = args["text"]
     rationale = args["rationale"]
+    topic = args.get("topic")
     references = args.get("references", [])
 
     # Get current state for policy check
@@ -306,6 +311,7 @@ def handle_record_decision(args: dict[str, Any]) -> dict[str, Any]:
     decision_item = {
         "text": text,
         "rationale": rationale,
+        "topic": topic,
         "references": references,
         "type": "decision"
     }
@@ -326,14 +332,18 @@ def handle_record_decision(args: dict[str, Any]) -> dict[str, Any]:
         }
 
     # Commit the decision
+    payload = {
+        "text": text,
+        "rationale": rationale,
+        "references": references,
+        "status": "committed"
+    }
+    if topic:
+        payload["topic"] = topic
+
     event = Event(
         type=EventType.DecisionMade,
-        payload={
-            "text": text,
-            "rationale": rationale,
-            "references": references,
-            "status": "committed"
-        }
+        payload=payload
     )
     seq = store.append(event)
 
@@ -341,6 +351,7 @@ def handle_record_decision(args: dict[str, Any]) -> dict[str, Any]:
         "status": "COMMITTED",
         "seq": seq,
         "decision": text,
+        "topic": topic,
         "rationale": rationale
     }
 

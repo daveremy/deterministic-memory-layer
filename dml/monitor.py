@@ -103,6 +103,8 @@ class DMLMonitor:
                         content.append(f"{d.text}\n", style="red")
                     else:
                         content.append("✓ ", style="green bold")
+                        if d.topic:
+                            content.append(f"[{d.topic}] ", style="cyan dim")
                         content.append(f"{d.text}\n", style="white")
 
         border = "bright_yellow" if self._should_flash("decisions") else "magenta"

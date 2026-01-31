@@ -392,11 +392,11 @@ User: "I need wheelchair accessible places"
 → add_constraint(text="wheelchair accessible required", priority="required")
 
 User: "Let's do April 12-19"
-→ record_decision(text="Travel dates: April 12-19, 2026", rationale="User confirmed dates")
+→ record_decision(text="Travel dates: April 12-19, 2026", rationale="User confirmed dates", topic="dates")
 
 You: "I recommend Hotel Accessible Tokyo"
 User: "Yes, book that one"
-→ record_decision(text="Book Hotel Accessible Tokyo", rationale="User confirmed hotel choice")
+→ record_decision(text="Book Hotel Accessible Tokyo", rationale="User confirmed hotel choice", topic="accommodation")
 
 ## Important
 

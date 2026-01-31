@@ -57,6 +57,7 @@ class DecisionProjection:
     references: list[int] = field(default_factory=list)  # event IDs referenced
     rationale: str | None = None  # why this decision was made
     status: str = "committed"  # "committed" | "blocked"
+    topic: str | None = None  # category like "dates", "accommodation", "transportation"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +66,7 @@ class DecisionProjection:
             "references": self.references,
             "rationale": self.rationale,
             "status": self.status,
+            "topic": self.topic,
         }
 
 
@@ -176,6 +178,7 @@ class ProjectionEngine:
                     references=payload.get("references", []),
                     rationale=payload.get("rationale"),
                     status=payload.get("status", "committed"),
+                    topic=payload.get("topic"),
                 )
             )
         # Clear pending verifications after each decision
