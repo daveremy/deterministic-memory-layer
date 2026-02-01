@@ -116,6 +116,11 @@ CSS = """
     width: 100%;
 }
 
+.panel-scroll {
+    height: 1fr;
+    scrollbar-gutter: stable;
+}
+
 #status-bar {
     dock: bottom;
     height: 1;
@@ -250,19 +255,23 @@ class DemoApp(App):
             with Vertical(id="right-pane"):
                 with Vertical(id="facts-panel"):
                     yield Label(" Facts ", classes="panel-title")
-                    yield Static("(waiting...)", id="facts-content")
+                    with VerticalScroll(classes="panel-scroll"):
+                        yield Static("(waiting...)", id="facts-content")
 
                 with Vertical(id="constraints-panel"):
                     yield Label(" Constraints ", classes="panel-title")
-                    yield Static("(none)", id="constraints-content")
+                    with VerticalScroll(classes="panel-scroll"):
+                        yield Static("(none)", id="constraints-content")
 
                 with Vertical(id="decisions-panel"):
                     yield Label(" Decisions ", classes="panel-title")
-                    yield Static("(none)", id="decisions-content")
+                    with VerticalScroll(classes="panel-scroll"):
+                        yield Static("(none)", id="decisions-content")
 
                 with Vertical(id="events-panel"):
                     yield Label(" Events ", classes="panel-title")
-                    yield Static("(waiting...)", id="events-content")
+                    with VerticalScroll(classes="panel-scroll"):
+                        yield Static("(waiting...)", id="events-content")
 
         yield Static("Press SPACE to start, Q to quit", id="status-bar")
         yield Footer()
