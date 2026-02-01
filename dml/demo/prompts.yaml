@@ -9,13 +9,19 @@ japan_trip:
   description: "A travel planning conversation that reveals DML's power"
 
   intro: |
-    You're about to see something different.
+    This is a LIVE demo - real Claude, real responses.
 
-    This is Claude with a Deterministic Memory Layer - structured memory
-    that can enforce rules, track decisions, and replay history.
+    Claude is connected to the DML MCP server and using the DML skill.
+    Every tool call you see is actually happening. Nothing is scripted.
 
-    Watch the right panel. Every fact, constraint, and decision
-    is captured as an immutable event.
+    DML gives Claude structured memory that can:
+    - Capture facts with full provenance
+    - Enforce constraints mathematically
+    - Track decisions with audit trails
+    - Replay alternate timelines
+
+    Watch the right panel update in real-time as Claude records
+    facts, constraints, and decisions.
 
   prompts:
     - prompt: |
@@ -124,7 +130,9 @@ simple:
 
   intro: |
     Quick demo of DML - Deterministic Memory Layer.
-    Watch the memory panel on the right.
+
+    This is LIVE - real Claude connected to the DML MCP server.
+    Watch the memory panel on the right update in real-time.
 
   prompts:
     - prompt: |
