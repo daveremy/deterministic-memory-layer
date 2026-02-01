@@ -31,18 +31,17 @@ def load_demo_prompts(name: str = "japan_trip") -> dict:
 
 # CSS for the app
 CSS = """
-Screen {
-    layout: grid;
-    grid-size: 3 1;
-    grid-columns: 2fr 1fr;
+#main-container {
+    width: 100%;
+    height: 100%;
 }
 
 #left-pane {
-    column-span: 1;
+    width: 2fr;
 }
 
 #right-pane {
-    column-span: 1;
+    width: 1fr;
 }
 
 #chat-container {
@@ -53,6 +52,7 @@ Screen {
 
 #chat-scroll {
     scrollbar-gutter: stable;
+    padding: 0 1;
 }
 
 #narrator-container {
@@ -76,11 +76,6 @@ Screen {
     margin-bottom: 1;
 }
 
-.user-prompt-marker {
-    color: $success;
-    text-style: bold;
-}
-
 .claude-response {
     margin-bottom: 1;
 }
@@ -93,62 +88,31 @@ Screen {
 #facts-panel {
     border: solid $primary;
     height: 1fr;
+    padding: 0 1;
 }
 
 #constraints-panel {
     border: solid $success;
     height: 1fr;
+    padding: 0 1;
 }
 
 #decisions-panel {
     border: solid $secondary;
     height: 1fr;
+    padding: 0 1;
 }
 
 #events-panel {
     border: solid $surface-lighten-2;
     height: 1fr;
+    padding: 0 1;
 }
 
 .panel-title {
     text-style: bold;
-    padding: 0 1;
     background: $surface-darken-1;
-}
-
-.fact-key {
-    color: $primary;
-    text-style: bold;
-}
-
-.fact-value {
-    color: $text;
-}
-
-.constraint-required {
-    color: $error;
-}
-
-.constraint-normal {
-    color: $success;
-}
-
-.decision-blocked {
-    color: $error;
-    text-style: bold;
-}
-
-.decision-ok {
-    color: $success;
-}
-
-.event-line {
-    color: $text-muted;
-}
-
-.status-line {
-    color: $text-muted;
-    text-style: italic;
+    width: 100%;
 }
 
 #status-bar {
@@ -199,8 +163,8 @@ class DemoApp(App):
         """Create the UI layout."""
         yield Header(show_clock=True)
 
-        with Horizontal():
-            # Left pane: chat + narrator
+        with Horizontal(id="main-container"):
+            # Left pane: chat + narrator (2/3 width)
             with Vertical(id="left-pane"):
                 with Vertical(id="chat-container"):
                     yield Label(" claude ", classes="panel-title")
@@ -210,7 +174,7 @@ class DemoApp(App):
                     yield Label(" Narrator ", classes="panel-title narrator-title")
                     yield Static("Watching the conversation...", id="narrator-content", classes="narrator-text")
 
-            # Right pane: DML monitor
+            # Right pane: DML monitor (1/3 width)
             with Vertical(id="right-pane"):
                 with Vertical(id="facts-panel"):
                     yield Label(" Facts ", classes="panel-title")
@@ -240,6 +204,12 @@ class DemoApp(App):
         except Exception as e:
             self.notify(f"Error loading script: {e}", severity="error")
             return
+
+        # Reset DML database immediately on startup
+        subprocess.run(
+            ["uv", "run", "dml", "reset", "--force"],
+            capture_output=True
+        )
 
         # Start DML state refresh
         self.set_interval(0.5, self.refresh_dml_state)
