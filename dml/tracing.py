@@ -213,6 +213,14 @@ class TracedMemoryAPI:
     def measure_drift(self, seq1: int, seq2: int):
         return self._api.measure_drift(seq1, seq2)
 
+    @trace_op("dml.memory.add_fact")
+    def add_fact(self, key: str, value: Any, confidence: float = 1.0):
+        return self._api.add_fact(key, value, confidence)
+
+    @trace_op("dml.memory.get_fact_history")
+    def get_fact_history(self, key: str) -> list:
+        return self._api.get_fact_history(key)
+
 
 def log_constraint_violation(
     constraint_text: str,

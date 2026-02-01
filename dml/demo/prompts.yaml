@@ -11,16 +11,18 @@ simple:
   intro: |
     SCENARIO: Planning a dinner party
 
-    You're planning a dinner party for Saturday with friends.
-    As plans evolve, you'll update the guest count and mention
-    that one guest has a dietary restriction.
+    You're planning a dinner party for Saturday. As plans evolve,
+    you'll update the guest count and mention a dietary restriction.
 
-    Watch how DML handles:
-    • Capturing facts from natural conversation
-    • Updating facts when plans change
-    • Recording constraints from casual mentions
-    • Querying history when you're uncertain
-    • Checking constraints before confirming decisions
+    Watch the panels on the right update in real-time as Claude
+    captures facts, tracks changes, and checks constraints.
+
+    Key moments to watch for:
+    • Facts captured from natural conversation
+    • A fact UPDATE (not overwrite) with history preserved
+    • A constraint recorded from casual mention
+    • Provenance query showing change history
+    • Constraint checking before agreeing to a suggestion
 
   prompts:
     - prompt: |
@@ -33,9 +35,13 @@ simple:
         Watch the Facts panel - Claude captures these details
         as structured data without being asked.
       narrator: |
-        Claude captured the event details as structured facts.
-        The user didn't ask for this - Claude recognized these
-        as important data worth tracking.
+        EVENT-DRIVEN MEMORY
+
+        Claude called the DML MCP server to record these facts.
+        Each fact is stored as an immutable EVENT with a sequence
+        number - not just overwritten state.
+
+        Check the Events panel - you can see the exact operations.
 
     - prompt: |
         Actually, two more friends want to come now. So that's
@@ -47,11 +53,14 @@ simple:
         Watch the Facts panel - the guest count should update.
         DML tracks this as a change with full history.
       narrator: |
-        FACT UPDATED
+        FACT SUPERSESSION
 
-        The guest count changed from 6 to 8. DML doesn't just
-        overwrite - it keeps the full history of changes.
-        You can trace back to see what changed and when.
+        The guest count changed from 6 to 8. In DML, updates
+        create NEW immutable events that reference the old ones -
+        nothing is overwritten or deleted. The Events panel shows
+        both: the original fact AND the update, linked together.
+
+        This is why we can always answer "what was it before?"
 
     - prompt: |
         Oh, important - Sarah is gluten-free. We need to keep
@@ -63,9 +72,13 @@ simple:
         Claude should record this as a constraint - any wording
         works since Claude will use reasoning to check conflicts.
       narrator: |
-        Claude recorded Sarah's dietary restriction as a constraint.
-        The exact wording doesn't matter - Claude will use its own
-        reasoning to detect conflicts with future decisions.
+        CONSTRAINT AS POLICY
+
+        Claude recorded this as a CONSTRAINT, not just a fact.
+        Constraints are checked against every future decision.
+
+        The exact wording doesn't matter - Claude uses semantic
+        reasoning to detect conflicts, not keyword matching.
 
     - prompt: |
         Wait, how many guests was it again? I feel like I've
@@ -76,11 +89,16 @@ simple:
         Claude can use DML's query capabilities to show the
         history of changes, not just the current value.
       narrator: |
-        PROVENANCE QUERY
+        OBSERVABILITY + PROVENANCE
 
-        Claude didn't just say "8 guests" - it showed the history:
-        originally 6, then updated to 8 when more friends joined.
-        This is queryable memory, not fuzzy recall.
+        Claude queried DML and showed the HISTORY: 6 → 8.
+
+        Press 'O' to see the Weave observability pane. Every
+        DML operation is traced. The key insight: each Weave
+        trace links back to the SOURCE EVENT in DML.
+
+        Traditional memory can't do this - you'd only see "8"
+        with no way to trace where it came from.
 
     - prompt: |
         Let's just order a bunch of pizzas for everyone. Easy!
@@ -90,23 +108,32 @@ simple:
         But wait - Sarah is gluten-free. Standard pizza won't work.
         Claude should query constraints and catch this conflict.
       narrator: |
-        Claude queried memory, found Sarah's gluten restriction,
+        CONSTRAINT-AWARE REASONING
+
+        Claude queried memory, found Sarah's gluten constraint,
         and recognized that regular pizza contains gluten.
 
-        Instead of blindly agreeing, Claude flagged the conflict.
-        This is semantic reasoning, not keyword matching.
+        Instead of blindly agreeing, Claude checked the constraint
+        and flagged the conflict. This is proactive compliance -
+        the agent respects constraints before making suggestions.
+        The matching was semantic ("gluten-free"), not keyword.
 
   outro: |
-    DML: Invisible but powerful.
+    DML: Event-Driven Memory for AI Agents
+
+    Technical architecture:
+    • MCP SERVER: Claude connects via standardized tool interface
+    • EVENT-DRIVEN: Every mutation is an immutable event
+    • TRACEABLE: Weave spans link back to source events
+    • DETERMINISTIC: Replay any point in history exactly
 
     The user never mentioned DML, yet Claude:
-    • Captured facts automatically
-    • Tracked changes with history
-    • Recognized constraints from natural language
-    • Queried provenance when asked
-    • Checked constraints before agreeing
+    • Recorded facts as events (not overwritten state)
+    • Tracked updates with supersession links
+    • Enforced constraints via policy checking
+    • Provided full provenance on demand
 
-    Structured memory that stays out of the way.
+    This is auditable AI memory - not fuzzy LLM recall.
 
 japan_trip:
   name: "Japan Trip Planning"

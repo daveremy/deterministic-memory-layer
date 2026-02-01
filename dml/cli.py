@@ -13,7 +13,16 @@ from dml.replay import ReplayEngine
 
 
 def get_default_db_path() -> Path:
-    """Get the default DML database path (~/.dml/memory.db)."""
+    """Get the default DML database path.
+
+    Checks DML_DB_PATH env var first, then falls back to ~/.dml/memory.db.
+    Ensures parent directory exists.
+    """
+    env_path = os.environ.get("DML_DB_PATH")
+    if env_path:
+        db_path = Path(env_path).expanduser().resolve()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        return db_path
     dml_dir = Path.home() / ".dml"
     dml_dir.mkdir(parents=True, exist_ok=True)
     return dml_dir / "memory.db"
@@ -913,11 +922,45 @@ def chat_demo() -> None:
 @click.pass_context
 def live_tui(ctx: click.Context, script: str | None, auto: bool, debug: bool) -> None:
     """Run scripted demo with real Claude and live monitor."""
+    import shutil
+    import subprocess
     from dml.demo.tui import DemoApp
+
+    # Check if we're already recording (avoid infinite loop)
+    if os.environ.get("DML_RECORDING"):
+        db_path = ctx.obj.get("db_path") if ctx.obj else None
+        app = DemoApp(script_name=script, auto_advance=auto, db_path=db_path, debug=debug)
+        app.run()
+        return
+
     db_path = ctx.obj.get("db_path") if ctx.obj else None
     app = DemoApp(script_name=script, auto_advance=auto, db_path=db_path, debug=debug)
-    app.run()
-    if debug:
+    result = app.run()
+
+    # Handle recording request
+    if isinstance(result, tuple) and len(result) == 2 and result[0] == "record":
+        output_file = result[1]
+        click.echo(f"\n🎬 Starting recording to: {output_file}")
+        click.echo("Recording will stop when you quit the demo (press Q).\n")
+
+        # Build command to relaunch inside asciinema
+        cmd = [
+            "asciinema", "rec",
+            "--stdin",
+            "-c", "DML_RECORDING=1 uv run dml live",
+            output_file
+        ]
+
+        try:
+            subprocess.run(cmd, check=True)
+            click.echo(f"\n✅ Recording saved to: {output_file}")
+            click.echo(f"   Play with:   asciinema play {output_file}")
+            click.echo(f"   Upload with: asciinema upload {output_file}")
+        except subprocess.CalledProcessError as e:
+            click.echo(f"\n❌ Recording failed: {e}")
+        except KeyboardInterrupt:
+            click.echo(f"\n⏹️  Recording stopped. File: {output_file}")
+    elif debug:
         click.echo(f"\nDebug log: ~/.dml/demo-debug.log")
 
 
@@ -1141,7 +1184,8 @@ def auto_demo(delay: int) -> None:
 
 @cli.command()
 @click.option("--init", "do_init", is_flag=True, help="Initialize DB if it doesn't exist")
-def serve(do_init: bool) -> None:
+@click.pass_context
+def serve(ctx: click.Context, do_init: bool) -> None:
     """Start the DML MCP server."""
     # Import here to avoid circular imports and only load when needed
     try:
@@ -1150,7 +1194,7 @@ def serve(do_init: bool) -> None:
         click.echo("Error: MCP server not yet implemented. Run after completing server.py")
         return
 
-    db_path = get_default_db_path()
+    db_path = Path(ctx.obj["db_path"])
 
     if do_init and not db_path.exists():
         store = EventStore(str(db_path))

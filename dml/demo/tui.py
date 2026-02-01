@@ -1,10 +1,25 @@
 """Demo TUI using Textual for proper scrolling and interactivity."""
 
+import os
 import subprocess
 import asyncio
 import uuid
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from dataclasses import dataclass, field
+
+
+# Load .env file if it exists (for WANDB_API_KEY, etc.)
+def _load_dotenv():
+    """Simple .env loader without external dependency."""
+    env_path = Path(__file__).parent.parent.parent / ".env"
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, value = line.partition("=")
+                    os.environ.setdefault(key.strip(), value.strip())
 
 import yaml
 from textual.app import App, ComposeResult
@@ -12,9 +27,18 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Static, Header, Footer, Markdown, Label, Rule, LoadingIndicator
 from textual.reactive import reactive
 from textual import work
+from rich.markup import escape as rich_escape
 
 from dml.events import EventStore
 from dml.replay import ReplayEngine
+from dml.tracing import WEAVE_AVAILABLE, init_tracing
+
+# Load .env before checking for WANDB_API_KEY
+_load_dotenv()
+
+# Try to import weave client for trace fetching
+if WEAVE_AVAILABLE:
+    import weave
 
 
 def load_all_scripts() -> dict:
@@ -38,9 +62,14 @@ def load_demo_prompts(name: str) -> dict:
 
 # CSS for the app
 CSS = """
-#main-container {
+#app-container {
     width: 100%;
     height: 100%;
+}
+
+#main-container {
+    width: 100%;
+    height: 1fr;
 }
 
 #left-pane {
@@ -49,6 +78,40 @@ CSS = """
 
 #right-pane {
     width: 1fr;
+    height: 100%;
+}
+
+#events-panel.flash {
+    background: $warning 30%;
+}
+
+/* Weave observability pane - bottom drawer */
+#weave-pane {
+    height: auto;
+    max-height: 40%;
+    border-top: heavy $primary;
+    background: $surface-darken-1;
+    display: none;
+}
+
+#weave-pane.visible {
+    display: block;
+}
+
+#weave-pane-header {
+    background: $primary-darken-2;
+    padding: 0 1;
+    height: 1;
+}
+
+#weave-pane-content {
+    padding: 1;
+    height: auto;
+    max-height: 18;
+}
+
+#weave-pane.flash {
+    border-top: heavy $warning;
 }
 
 #chat-container {
@@ -63,19 +126,23 @@ CSS = """
 }
 
 #narrator-container {
-    height: 1fr;
-    border: heavy $warning;
-    background: $surface-darken-1;
-    padding: 0 1;
+    height: 2fr;
+    border: double $warning;
+    background: $warning 8%;
+    padding: 1 2;
 }
 
 .narrator-title {
     color: $warning;
     text-style: bold;
+    background: $warning 20%;
+    padding: 0 1;
 }
 
 .narrator-text {
     color: $text;
+    text-style: bold;
+    padding: 1 0;
 }
 
 .user-prompt {
@@ -211,6 +278,11 @@ class DemoApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("space", "next_step", "Next"),
+        ("enter", "next_step", "Next"),
+        ("o", "toggle_observability", "Toggle obs"),
+        ("r", "start_recording", "Record"),
+        ("ctrl+left", "focus_prev_pane", "Prev pane"),
+        ("ctrl+right", "focus_next_pane", "Next pane"),
         ("1", "select_script(1)", "Script 1"),
         ("2", "select_script(2)", "Script 2"),
         ("3", "select_script(3)", "Script 3"),
@@ -220,7 +292,7 @@ class DemoApp(App):
     # Reactive state
     current_prompt_index = reactive(0)
     narrator_text = reactive("")
-    status_text = reactive("Press SPACE to start...")
+    status_text = reactive("Press ENTER/SPACE to start...")
     is_running = reactive(False)
 
     def __init__(
@@ -233,7 +305,9 @@ class DemoApp(App):
         super().__init__()
         self.script_name = script_name  # None means show selection
         self.auto_advance = auto_advance
-        self.db_path = db_path or str(Path.home() / ".dml" / "memory.db")
+        # Check env var if db_path not provided, resolve to absolute path
+        raw_path = db_path or os.environ.get("DML_DB_PATH") or str(Path.home() / ".dml" / "memory.db")
+        self.db_path = str(Path(raw_path).expanduser().resolve())
         self.debug_mode = debug
         self.debug_log = Path.home() / ".dml" / "demo-debug.log" if debug else None
         self.script = None
@@ -250,52 +324,76 @@ class DemoApp(App):
         if self.debug_log:
             self.debug_log.write_text(f"=== Demo session {self.session_id} ===\n")
             self.debug_log.open("a").write(f"Demo dir: {self.demo_dir}\n")
+        # Track event count and timer for flash indicator
+        self._last_event_count = 0
+        self._flash_timer = None
+        # Weave client for trace fetching
+        self._weave_client = None
+        self._weave_initialized = False
+        self._last_trace_count = 0
+        self._weave_dashboard_url = (
+            os.environ.get("WEAVE_DASHBOARD_URL")
+            or os.environ.get("WANDB_DASHBOARD_URL")
+            or "https://wandb.ai/daveremy-remzota-labs/dml-mcp-server/weave"
+        )
+        # Typewriter effect state
+        self._typewriter_words: list[str] = []
+        self._typewriter_index: int = 0
+        self._typewriter_suffix: str = ""
+        self._typewriter_timer = None
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
         yield Header(show_clock=True)
 
-        with Horizontal(id="main-container"):
-            # Left pane: chat + narrator (2/3 width)
-            with Vertical(id="left-pane"):
-                with Vertical(id="chat-container"):
-                    yield Label(" claude ", classes="panel-title")
-                    yield VerticalScroll(id="chat-scroll")
+        with Vertical(id="app-container"):
+            with Horizontal(id="main-container"):
+                # Left pane: chat + narrator (2/3 width)
+                with Vertical(id="left-pane"):
+                    with Vertical(id="chat-container"):
+                        yield Label(" claude ", classes="panel-title")
+                        yield VerticalScroll(id="chat-scroll")
 
-                with Vertical(id="narrator-container"):
-                    yield Label(" Narrator ", classes="panel-title narrator-title")
-                    yield Static("", id="narrator-content", classes="narrator-text")
+                    with Vertical(id="narrator-container"):
+                        yield Label(" Narrator ", classes="panel-title narrator-title")
+                        yield Static("", id="narrator-content", classes="narrator-text")
 
-            # Right pane: DML monitor (1/3 width)
-            with Vertical(id="right-pane"):
-                with Vertical(id="facts-panel"):
-                    yield Label(" Facts ", classes="panel-title")
-                    with VerticalScroll(classes="panel-scroll"):
-                        yield Static("(waiting...)", id="facts-content")
+                # Right pane: DML state monitor (1/3 width) - always visible
+                with VerticalScroll(id="right-pane"):
+                    with Vertical(id="facts-panel"):
+                        yield Label(" Facts ", classes="panel-title")
+                        with VerticalScroll(classes="panel-scroll"):
+                            yield Static("(waiting...)", id="facts-content")
 
-                with Vertical(id="constraints-panel"):
-                    yield Label(" Constraints ", classes="panel-title")
-                    with VerticalScroll(classes="panel-scroll"):
-                        yield Static("(none)", id="constraints-content")
+                    with Vertical(id="constraints-panel"):
+                        yield Label(" Constraints ", classes="panel-title")
+                        with VerticalScroll(classes="panel-scroll"):
+                            yield Static("(none)", id="constraints-content")
 
-                with Vertical(id="decisions-panel"):
-                    yield Label(" Decisions ", classes="panel-title")
-                    with VerticalScroll(classes="panel-scroll"):
-                        yield Static("(none)", id="decisions-content")
+                    with Vertical(id="decisions-panel"):
+                        yield Label(" Decisions ", classes="panel-title")
+                        with VerticalScroll(classes="panel-scroll"):
+                            yield Static("(none)", id="decisions-content")
 
-                with Vertical(id="events-panel"):
-                    yield Label(" Events ", classes="panel-title")
-                    with VerticalScroll(classes="panel-scroll"):
-                        yield Static("(waiting...)", id="events-content")
+                    with Vertical(id="events-panel"):
+                        yield Label(" Events ", classes="panel-title")
+                        with VerticalScroll(classes="panel-scroll"):
+                            yield Static("(waiting...)", id="events-content")
 
-        yield Static("Press SPACE to start, Q to quit", id="status-bar")
+            # Weave observability pane - bottom drawer (toggle with 'o')
+            with Vertical(id="weave-pane"):
+                yield Label(" Observability [dim](Weave provider, press 'o' to hide)[/] ", id="weave-pane-header", classes="panel-title")
+                with VerticalScroll(id="weave-pane-content"):
+                    yield Static("(initializing...)", id="weave-content")
+
+        yield Static("ENTER/SPACE: proceed  •  Q: quit  •  O: observability  •  Ctrl+←/→: focus pane", id="status-bar")
         yield Footer()
 
         # Intro overlay (shown on top initially)
         with Vertical(id="intro-overlay"):
             yield Static("", id="intro-title")
             yield Static("", id="intro-content")
-            yield Static(">>> Press SPACE to start <<<", id="intro-prompt")
+            yield Static(">>> Press ENTER/SPACE to start <<<", id="intro-prompt")
 
         # Outro overlay (hidden initially)
         with Vertical(id="outro-overlay"):
@@ -317,8 +415,28 @@ class DemoApp(App):
         else:
             self._load_script(self.script_name)
 
+        # Initialize event count from store to avoid initial flash
+        try:
+            store = EventStore(self.db_path)
+            self._last_event_count = len(store.get_events())
+            store.close()
+        except Exception:
+            pass  # Keep default of 0
+
+        # Initialize Weave for tracing (if available)
+        self._initialize_weave()
+
+        # Allow focusing scroll panes for keyboard navigation
+        for selector in ("#chat-scroll", "#right-pane", "#weave-pane-content"):
+            try:
+                self.query_one(selector).can_focus = True
+            except Exception:
+                pass
+
         # Start DML state refresh
         self.set_interval(0.5, self.refresh_dml_state)
+        # Start Weave trace refresh (separate interval)
+        self.set_interval(1.0, self.refresh_weave_traces)
 
     def _show_script_selection(self) -> None:
         """Show script selection on intro overlay."""
@@ -332,14 +450,22 @@ class DemoApp(App):
         # Build content with context and script list
         lines = [
             "[bold cyan]What is DML?[/]",
-            "DML gives AI agents structured, auditable memory. Instead of facts",
-            "getting lost in conversation history, DML captures them as queryable",
-            "data with full provenance tracking.",
+            "DML gives AI agents structured, auditable memory. It's an [bold]MCP server[/]",
+            "that Claude connects to - a standardized tool interface for memory operations.",
             "",
-            "[bold cyan]How it works[/]",
-            "This is LIVE - real Claude, real responses. The prompts are scripted",
-            "but Claude's responses are not. Claude is connected to the DML MCP",
-            "server and every tool call you see is actually happening.",
+            "[bold cyan]Event-Driven Memory[/]",
+            "Unlike traditional state-based memory (where you only see current values),",
+            "DML is [bold]inspired by event sourcing[/]: every change is an immutable event",
+            "with a sequence number and source ID. Nothing is overwritten - history is preserved.",
+            "",
+            "[bold cyan]Observability Integration[/]",
+            "Every DML operation is traced via Weave. Press [bold]O[/] during the demo to",
+            "see the observability pane. Each trace links back to its source event -",
+            "something impossible with traditional memory approaches.",
+            "",
+            "[bold cyan]This Demo[/]",
+            "This is [bold]LIVE[/] - real Claude, real responses. Prompts are scripted but",
+            "Claude's responses are not. Watch the right panels update in real-time.",
             "",
             "[bold]Select a demo:[/]",
             "",
@@ -355,9 +481,9 @@ class DemoApp(App):
         intro_content.update("\n".join(lines))
         num_scripts = len(all_scripts)
         if num_scripts <= 3:
-            intro_prompt.update(">>> Press 1, 2, or 3 to select, Q to quit <<<")
+            intro_prompt.update(">>> Press 1, 2, or 3 to select  •  R to record  •  Q to quit <<<")
         else:
-            intro_prompt.update(f">>> Press 1-{num_scripts} to select, Q to quit <<<")
+            intro_prompt.update(f">>> Press 1-{num_scripts} to select  •  R to record  •  Q to quit <<<")
 
     def _load_script(self, script_name: str) -> None:
         """Load a specific script and populate overlays."""
@@ -371,14 +497,20 @@ class DemoApp(App):
             self.notify(f"Error loading script: {e}", severity="error")
             return
 
-        # Reset DML database
+        # Ensure DB parent directory exists
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+
+        # Reset DML database (--db must come before subcommand for Click)
         result = subprocess.run(
-            ["uv", "run", "dml", "reset", "--force"],
+            ["uv", "run", "dml", "--db", self.db_path, "reset", "--force"],
             capture_output=True,
             text=True
         )
         if result.returncode != 0:
             self.notify(f"Reset failed: {result.stderr}", severity="error")
+
+        # Reset event count after clearing DB
+        self._last_event_count = 0
 
         # Refresh state display to show empty state
         self.refresh_dml_state()
@@ -394,12 +526,12 @@ class DemoApp(App):
             intro_content.update(intro)
         else:
             intro_content.update(f"{len(self.prompts)} prompts in this demo.")
-        intro_prompt.update(">>> Press SPACE to start, Q to quit <<<")
+        intro_prompt.update(">>> Press ENTER/SPACE to start, Q to quit <<<")
 
         # Populate outro overlay
         outro_content = self.query_one("#outro-content", Static)
         outro = self.script.get("outro", "Demo complete!").strip()
-        outro_content.update(outro + "\n\n[bold green]>>> Press SPACE to return to menu, Q to quit <<<[/]")
+        outro_content.update(outro + "\n\n[bold green]>>> Press ENTER/SPACE to return to menu, Q to quit <<<[/]")
 
     def action_select_script(self, number: int) -> None:
         """Handle script selection by number key."""
@@ -413,6 +545,498 @@ class DemoApp(App):
         if 1 <= number <= len(self.available_scripts):
             script_name = self.available_scripts[number - 1]
             self._load_script(script_name)
+
+    def action_toggle_observability(self) -> None:
+        """Toggle the Weave observability pane visible/hidden."""
+        pane = self.query_one("#weave-pane", Vertical)
+        if pane.has_class("visible"):
+            pane.remove_class("visible")
+        else:
+            pane.add_class("visible")
+            # Refresh traces when opening
+            self.refresh_weave_traces()
+
+    def action_start_recording(self) -> None:
+        """Start recording the demo with asciinema."""
+        # Only allow from script selection screen (not during demo)
+        if self.demo_started or self.script_selected:
+            self.notify("Recording can only be started from the menu", severity="warning")
+            return
+
+        # Check if asciinema is available
+        import shutil
+        if not shutil.which("asciinema"):
+            self.notify("asciinema not found. Install with: brew install asciinema", severity="error")
+            return
+
+        # Generate output filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        recordings_dir = Path.home() / ".dml" / "recordings"
+        recordings_dir.mkdir(parents=True, exist_ok=True)
+        output_file = recordings_dir / f"dml_demo_{timestamp}.cast"
+
+        # Exit and relaunch with asciinema
+        self.exit(result=("record", str(output_file)))
+
+    def _pane_focusables(self) -> list:
+        focusables = []
+        for selector in ("#chat-scroll", "#right-pane"):
+            try:
+                focusables.append(self.query_one(selector))
+            except Exception:
+                pass
+        try:
+            weave_pane = self.query_one("#weave-pane", Vertical)
+            if weave_pane.has_class("visible"):
+                focusables.append(self.query_one("#weave-pane-content"))
+        except Exception:
+            pass
+        return focusables
+
+    def action_focus_next_pane(self) -> None:
+        focusables = self._pane_focusables()
+        if not focusables:
+            return
+        current = self.focused
+        if current in focusables:
+            idx = (focusables.index(current) + 1) % len(focusables)
+        else:
+            idx = 0
+        self.set_focus(focusables[idx])
+
+    def action_focus_prev_pane(self) -> None:
+        focusables = self._pane_focusables()
+        if not focusables:
+            return
+        current = self.focused
+        if current in focusables:
+            idx = (focusables.index(current) - 1) % len(focusables)
+        else:
+            idx = 0
+        self.set_focus(focusables[idx])
+
+    def _initialize_weave(self) -> None:
+        """Initialize Weave client for trace fetching."""
+        if not WEAVE_AVAILABLE:
+            return
+
+        # Check if WANDB_API_KEY is set
+        if not os.environ.get("WANDB_API_KEY"):
+            return
+
+        try:
+            # Initialize Weave - use same project as MCP server
+            self._weave_client = weave.init("dml-mcp-server")
+            self._weave_initialized = True
+            self.notify("Weave tracing enabled", severity="information")
+        except Exception as e:
+            self.notify(f"Weave init failed: {e}", severity="warning")
+
+    @staticmethod
+    def _coerce_datetime(value):
+        if value is None:
+            return None
+        if not isinstance(value, datetime):
+            return None
+        if getattr(value, "tzinfo", None) is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    @classmethod
+    def _weave_duration_ms(cls, call) -> int | None:
+        started = cls._coerce_datetime(getattr(call, "started_at", None))
+        ended = cls._coerce_datetime(getattr(call, "ended_at", None))
+        if started and ended:
+            return int((ended - started).total_seconds() * 1000)
+        return None
+
+    @staticmethod
+    def _percentile(values: list[int], pct: float) -> int | None:
+        if not values:
+            return None
+        vals = sorted(values)
+        if len(vals) == 1:
+            return vals[0]
+        k = (pct / 100.0) * (len(vals) - 1)
+        f = int(k)
+        c = min(f + 1, len(vals) - 1)
+        if f == c:
+            return vals[f]
+        d = k - f
+        return int(vals[f] + (vals[c] - vals[f]) * d)
+
+    @staticmethod
+    def _sparkline(values: list[int], width: int = 20) -> str:
+        if not values:
+            return ""
+        series = values[-width:]
+        low = min(series)
+        high = max(series)
+        chars = " .:-=+*#%@"
+        if high == low:
+            return chars[len(chars) // 2] * len(series)
+        out = []
+        for val in series:
+            idx = int((val - low) / (high - low) * (len(chars) - 1))
+            out.append(chars[idx])
+        return "".join(out)
+
+    @classmethod
+    def _format_relative_time(cls, value, now) -> str:
+        dt = cls._coerce_datetime(value)
+        if dt is None:
+            return "?"
+        delta = now - dt
+        seconds = max(0, int(delta.total_seconds()))
+        if seconds < 60:
+            return f"{seconds}s"
+        if seconds < 3600:
+            return f"{seconds // 60}m"
+        if seconds < 86400:
+            return f"{seconds // 3600}h"
+        return f"{seconds // 86400}d"
+
+    @staticmethod
+    def _weave_category(op_name: str) -> tuple[str, str]:
+        op = op_name.lower()
+        if "constraint" in op:
+            return "Constraints", "red"
+        if "decision" in op:
+            return "Decisions", "green"
+        if "fact" in op:
+            return "Facts", "cyan"
+        if "event" in op:
+            return "Events", "blue"
+        return "Other", "magenta"
+
+    @staticmethod
+    def _truncate(value: str, limit: int = 36) -> str:
+        if len(value) <= limit:
+            return value
+        return value[: max(0, limit - 3)] + "..."
+
+    @classmethod
+    def _event_from_call(cls, call) -> tuple[int | None, str | None, dict | None]:
+        inputs = getattr(call, "inputs", None)
+        output = getattr(call, "output", None)
+        if not isinstance(inputs, dict):
+            if isinstance(output, int):
+                return output, None, None
+            return None, None, None
+        event_obj = inputs.get("event")
+        if event_obj is None:
+            if isinstance(output, int):
+                return output, None, None
+            return None, None, None
+        if isinstance(event_obj, dict):
+            seq = event_obj.get("global_seq") or event_obj.get("seq")
+            ev_type = event_obj.get("type")
+            payload = event_obj.get("payload")
+        else:
+            seq = getattr(event_obj, "global_seq", None) or getattr(event_obj, "seq", None)
+            ev_type = getattr(event_obj, "type", None)
+            payload = getattr(event_obj, "payload", None)
+        if hasattr(ev_type, "value"):
+            ev_type = ev_type.value
+        if seq is None and isinstance(output, int):
+            seq = output
+        if isinstance(payload, dict):
+            return seq, str(ev_type) if ev_type is not None else None, payload
+        return seq, str(ev_type) if ev_type is not None else None, None
+
+    @staticmethod
+    def _event_color(event_type: str | None) -> str:
+        if not event_type:
+            return "magenta"
+        et = event_type.lower()
+        if "fact" in et:
+            return "cyan"
+        if "constraint" in et:
+            return "red"
+        if "decision" in et:
+            return "green"
+        if "memorywrite" in et:
+            return "yellow"
+        return "blue"
+
+    @staticmethod
+    def _payload_summary(payload: dict | None, limit_keys: int = 3) -> str:
+        if not isinstance(payload, dict) or not payload:
+            return ""
+        parts = []
+        for idx, (key, value) in enumerate(payload.items()):
+            if idx >= limit_keys:
+                break
+            text = str(value).replace("\n", " ")
+            if len(text) > 24:
+                text = text[:21] + "..."
+            parts.append(f"{key}={text}")
+        remaining = len(payload) - limit_keys
+        if remaining > 0:
+            parts.append(f"+{remaining} more")
+        return " ".join(parts)
+
+    @classmethod
+    def _call_name(cls, call) -> str:
+        for attr in ("op_name", "display_name", "name", "op"):
+            val = getattr(call, attr, None)
+            if hasattr(val, "name"):
+                val = getattr(val, "name", None)
+            if isinstance(val, str) and val:
+                return val
+        return "unknown"
+
+    @classmethod
+    def _call_label_and_detail(cls, call) -> tuple[str, str | None]:
+        name = cls._call_name(call)
+        short = name.split(".")[-1] if "." in name else name
+        if ":" in short and len(short) > 16:
+            short = short.split(":", 1)[0]
+
+        detail = None
+        inputs = getattr(call, "inputs", None)
+        output = getattr(call, "output", None)
+        name_lower = name.lower()
+        if "event.append" in name_lower:
+            seq = None
+            if isinstance(output, int):
+                seq = output
+            if isinstance(inputs, dict):
+                event_obj = inputs.get("event")
+                if event_obj is not None:
+                    if isinstance(event_obj, dict):
+                        if seq is None:
+                            seq = event_obj.get("global_seq") or event_obj.get("seq")
+                        ev_type = event_obj.get("type")
+                        payload = event_obj.get("payload")
+                    else:
+                        if seq is None:
+                            seq = getattr(event_obj, "global_seq", None) or getattr(event_obj, "seq", None)
+                        ev_type = getattr(event_obj, "type", None)
+                        payload = getattr(event_obj, "payload", None)
+                    if hasattr(ev_type, "value"):
+                        ev_type = ev_type.value
+                    payload_snippet = None
+                    if isinstance(payload, dict) and payload:
+                        key = next(iter(payload.keys()))
+                        payload_snippet = f"{key}={payload.get(key)}"
+                    parts = []
+                    if seq is not None:
+                        parts.append(f"#{seq}")
+                    if ev_type:
+                        parts.append(str(ev_type))
+                    if payload_snippet:
+                        parts.append(payload_snippet)
+                    if parts:
+                        detail = " ".join(parts)
+
+        if isinstance(inputs, dict):
+            if "key" in inputs and "value" in inputs:
+                detail = f"{inputs.get('key')} = {inputs.get('value')}"
+            elif "query" in inputs:
+                detail = str(inputs.get("query"))
+            elif "items" in inputs and isinstance(inputs.get("items"), list):
+                detail = f"{len(inputs.get('items'))} items"
+            elif "event" in inputs:
+                event = inputs.get("event")
+                event_type = getattr(event, "type", None)
+                if event_type is not None:
+                    detail = str(event_type)
+                payload = getattr(event, "payload", None)
+                if isinstance(payload, dict) and payload:
+                    key = next(iter(payload.keys()))
+                    detail = f"{detail + ' ' if detail else ''}{key}={payload.get(key)}"
+
+        if detail is not None:
+            detail = cls._truncate(str(detail), 40)
+
+        if short.startswith("dml.memory."):
+            short = short.split("dml.memory.", 1)[-1]
+        if short.startswith("dml.event."):
+            short = short.split("dml.event.", 1)[-1]
+
+        return short, detail
+
+    def refresh_weave_traces(self) -> None:
+        """Refresh the Weave observability pane."""
+        weave_content = self.query_one("#weave-content", Static)
+        weave_pane = self.query_one("#weave-pane", Vertical)
+
+        # If Weave not available or not initialized, show setup instructions
+        if not self._weave_initialized or not self._weave_client:
+            if WEAVE_AVAILABLE and not os.environ.get("WANDB_API_KEY"):
+                weave_content.update(
+                    "[bold]Observability[/] [dim](Weave provider)[/]\n"
+                    f"[dim]Dashboard:[/] {self._weave_dashboard_url}\n\n"
+                    "[dim]Not configured. To enable:[/]\n"
+                    "1. Sign up at wandb.ai\n"
+                    "2. Get API key from wandb.ai/authorize\n"
+                    "3. Set WANDB_API_KEY in .env file"
+                )
+            elif not WEAVE_AVAILABLE:
+                weave_content.update(
+                    "[bold]Observability[/] [dim](Weave provider)[/]\n"
+                    f"[dim]Dashboard:[/] {self._weave_dashboard_url}\n\n"
+                    "[dim]Weave package not installed.[/]"
+                )
+            else:
+                weave_content.update(
+                    "[bold]Observability[/] [dim](Weave provider)[/]\n"
+                    f"[dim]Dashboard:[/] {self._weave_dashboard_url}\n\n"
+                    "[dim]Weave not initialized[/]"
+                )
+            return
+
+        try:
+            # Fetch recent traces from Weave
+            calls = list(self._weave_client.get_calls(
+                limit=50,
+                sort_by=[{"field": "started_at", "direction": "desc"}],
+            ))
+            # Filter to last 2 minutes for recency (relative to latest call to avoid clock skew)
+            now = datetime.now(timezone.utc)
+            started_times = [
+                self._coerce_datetime(getattr(call, "started_at", None))
+                for call in calls
+            ]
+            started_times = [t for t in started_times if t is not None]
+            if started_times:
+                latest = max(started_times)
+                cutoff = latest - timedelta(seconds=120)
+                recent_calls = []
+                for call in calls:
+                    started = self._coerce_datetime(getattr(call, "started_at", None))
+                    if started and started >= cutoff:
+                        recent_calls.append(call)
+                if recent_calls:
+                    calls = recent_calls
+
+            # Flash indicator for new traces
+            if len(calls) > self._last_trace_count and weave_pane.has_class("visible"):
+                weave_pane.add_class("flash")
+                if self._flash_timer:
+                    self._flash_timer.stop()
+
+                def clear_flash():
+                    weave_pane.remove_class("flash")
+                    self._flash_timer = None
+
+                self._flash_timer = self.set_timer(0.3, clear_flash)
+            self._last_trace_count = len(calls)
+
+            if calls:
+                # now already computed above
+                durations = []
+                recent_60s = 0
+                errors = 0
+                for call in calls:
+                    duration_ms = self._weave_duration_ms(call)
+                    if duration_ms is not None:
+                        durations.append(duration_ms)
+                    started = self._coerce_datetime(getattr(call, "started_at", None))
+                    if started and now - started <= timedelta(seconds=60):
+                        recent_60s += 1
+                    if getattr(call, "error", None) or getattr(call, "exception", None):
+                        errors += 1
+
+                p50 = self._percentile(durations, 50)
+                p95 = self._percentile(durations, 95)
+                spark = self._sparkline(durations, width=20)
+
+                lines = [
+                    "[bold cyan]Observability[/] [dim](Weave calls, last 2 minutes)[/]",
+                    f"[dim]Dashboard:[/] {self._weave_dashboard_url}",
+                    f"[dim]Updated {now.strftime('%H:%M:%S')}[/]  "
+                    f"[bold]Total[/]: {len(calls)}  "
+                    f"[bold]1m[/]: {recent_60s}  "
+                    f"[bold]Errors[/]: {errors}",
+                    f"[bold]Latency[/]: "
+                    f"p50 {p50 if p50 is not None else '--'}ms  "
+                    f"p95 {p95 if p95 is not None else '--'}ms",
+                ]
+
+                if spark:
+                    lines.append(f"[dim]Spark[/]: {spark}")
+                lines.append("")
+
+                event_calls = []
+                other_calls = 0
+                for call in calls[:25]:
+                    inputs = getattr(call, "inputs", None)
+                    if isinstance(inputs, dict) and "event" in inputs:
+                        event_calls.append(call)
+                    else:
+                        other_calls += 1
+
+                lines.append(
+                    f"[bold]DML Events (from Weave)[/]: {len(event_calls)}  "
+                    f"[dim]Other calls: {other_calls}[/]"
+                )
+
+                groups: dict[str, list] = {}
+                for call in event_calls:
+                    seq, ev_type, payload = self._event_from_call(call)
+                    label = ev_type or "Unknown"
+                    groups.setdefault(label, []).append((call, seq, payload))
+
+                if not groups:
+                    lines.append("[dim]No DML events in recent Weave calls yet.[/]")
+                    if calls:
+                        lines.append("[dim]Recent Weave calls:[/]")
+                        for call in calls[:5]:
+                            name = self._call_name(call)
+                            inputs = getattr(call, "inputs", None)
+                            attrs = getattr(call, "attributes", None)
+                            input_keys = []
+                            if isinstance(inputs, dict):
+                                input_keys = list(inputs.keys())
+                            attr_keys = []
+                            if isinstance(attrs, dict):
+                                attr_keys = list(attrs.keys())
+                            name_text = self._truncate(name, 36)
+                            keys_text = self._truncate(", ".join(input_keys), 28) if input_keys else "-"
+                            attrs_text = self._truncate(", ".join(attr_keys), 28) if attr_keys else "-"
+                            lines.append(
+                                f"  [dim]{name_text}[/] [dim]inputs:[/] {keys_text} [dim]attrs:[/] {attrs_text}"
+                            )
+                else:
+                    lines.append("")
+                    for label in sorted(groups.keys()):
+                        color = self._event_color(label)
+                        lines.append(f"[bold]{label}[/] [dim]({len(groups[label])})[/]")
+                        for call, seq, payload in groups[label][:3]:
+                            duration_ms = self._weave_duration_ms(call)
+                            started = getattr(call, "started_at", None)
+                            rel = self._format_relative_time(started, now)
+                            error = getattr(call, "error", None) or getattr(call, "exception", None)
+                            status_symbol = "!" if error else "•"
+                            status_color = "red" if error else color
+                            seq_text = f"#{seq}" if seq is not None else "#?"
+                            payload_snippet = None
+                            if isinstance(payload, dict) and payload:
+                                key = next(iter(payload.keys()))
+                                payload_snippet = f"{key}={payload.get(key)}"
+                            timing = f"{duration_ms}ms" if duration_ms is not None else "?"
+                            if payload_snippet:
+                                payload_snippet = self._truncate(str(payload_snippet), 32)
+                                lines.append(
+                                    f"  [{status_color}]{status_symbol}[/] "
+                                    f"[{color}]{seq_text}[/] [dim]{payload_snippet}  {timing} {rel}[/]"
+                                )
+                            else:
+                                lines.append(
+                                    f"  [{status_color}]{status_symbol}[/] "
+                                    f"[{color}]{seq_text}[/] [dim]{timing} {rel}[/]"
+                                )
+                        if len(groups[label]) > 3:
+                            lines.append(f"  [dim]... +{len(groups[label]) - 3} more[/]")
+
+                weave_content.update("\n".join(lines))
+            else:
+                weave_content.update("[dim]No Weave traces yet... Run the demo to generate traces.[/]")
+
+        except Exception as e:
+            weave_content.update(f"[red]Weave error: {rich_escape(str(e))}[/]")
 
     def action_quit(self) -> None:
         """Quit the app and clean up temp directory."""
@@ -491,13 +1115,19 @@ class DemoApp(App):
 
     def reset_demo(self) -> None:
         """Reset DML database for fresh demo."""
+        # Ensure DB parent directory exists
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+
+        # Reset DML database (--db must come before subcommand for Click)
         result = subprocess.run(
-            ["uv", "run", "dml", "reset", "--force"],
+            ["uv", "run", "dml", "--db", self.db_path, "reset", "--force"],
             capture_output=True,
             text=True
         )
         if result.returncode != 0:
             self.notify(f"Reset failed: {result.stderr}", severity="error")
+        # Reset event count after clearing DB
+        self._last_event_count = 0
         # Clear chat
         chat_scroll = self.query_one("#chat-scroll")
         chat_scroll.remove_children()
@@ -527,7 +1157,10 @@ class DemoApp(App):
         else:
             narrator.update(f"[dim]Sending prompt {self.current_prompt_index + 1}...[/]")
 
-        status_bar.update(f"[{self.current_prompt_index + 1}/{len(self.prompts)}] Sending to Claude... [dim](Q to quit)[/]")
+        status_bar.update(
+            f"[{self.current_prompt_index + 1}/{len(self.prompts)}] Sending to Claude... "
+            "[dim](ENTER/SPACE to proceed, Q to quit, O for observability)[/]"
+        )
 
         # Add user message to chat with > prefix
         user_lines = prompt.split('\n')
@@ -587,7 +1220,7 @@ class DemoApp(App):
             final_narrator = f"[yellow bold]⚠ {expectation_warning}[/]\n\n{narrator_text}" if narrator_text else f"[yellow bold]⚠ {expectation_warning}[/]"
 
         if is_complete:
-            status_bar.update("[bold]Demo complete![/] Press SPACE to see summary, Q to quit.")
+            status_bar.update("[bold]Demo complete![/] Press ENTER/SPACE to see summary, Q to quit.")
             if final_narrator:
                 narrator.update(final_narrator)
             else:
@@ -599,13 +1232,18 @@ class DemoApp(App):
                     narrator.update(final_narrator + "\n\n[dim]Auto-advancing in 5 seconds...[/]")
                 else:
                     narrator.update("[dim]Auto-advancing in 5 seconds...[/]")
-                status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Auto-advancing... [dim](Q to quit)[/]")
+                status_bar.update(
+                    f"[{self.current_prompt_index}/{len(self.prompts)}] Auto-advancing... "
+                    "[dim](Q to quit)[/]"
+                )
             else:
                 if final_narrator:
-                    narrator.update(final_narrator + "\n\n[bold green]>>> Press SPACE to continue <<<[/]")
+                    narrator.update(final_narrator + "\n\n[bold green]>>> Press ENTER/SPACE to continue <<<[/]")
                 else:
-                    narrator.update("[bold green]>>> Press SPACE to continue <<<[/]")
-                status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Press SPACE to continue, Q to quit")
+                    narrator.update("[bold green]>>> Press ENTER/SPACE to continue <<<[/]")
+                status_bar.update(
+                    f"[{self.current_prompt_index}/{len(self.prompts)}] Press ENTER/SPACE to continue, Q to quit"
+                )
 
         self.is_running = False
 
@@ -677,12 +1315,17 @@ class DemoApp(App):
             with open(self.debug_log, "a") as f:
                 f.write(f"\n--- Command (cwd: {self.demo_dir}) ---\n{shlex.join(cmd)}\n")
 
+        # Pass DML_DB_PATH so Claude's MCP server uses same database
+        env = os.environ.copy()
+        env["DML_DB_PATH"] = self.db_path
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(self.demo_dir),
+                env=env,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
             response = stdout.decode().strip()
@@ -757,55 +1400,101 @@ class DemoApp(App):
         else:
             decisions_content.update("[dim]No decisions recorded[/]")
 
-        # Update Events - show newest first with descriptive text
+        # Update Events panel - always show DML events
         events_content = self.query_one("#events-content", Static)
+        events_panel = self.query_one("#events-panel", Vertical)
+
+        # Flash indicator for new events
+        if len(events) > self._last_event_count:
+            events_panel.add_class("flash")
+            # Cancel previous timer to avoid race conditions
+            if self._flash_timer:
+                self._flash_timer.stop()
+
+            def clear_flash():
+                events_panel.remove_class("flash")
+                self._flash_timer = None
+
+            self._flash_timer = self.set_timer(0.3, clear_flash)
+        self._last_event_count = len(events)
+
         if events:
             lines = []
-            # Show all events, newest first (scrollable)
-            for e in reversed(events):
+            # Show recent events, newest first (scrollable)
+            for e in reversed(events[-50:]):
                 seq = e.global_seq
                 etype = e.type.value
-                # Format: #seq T:turn or just #seq if no turn
+                color = self._event_color(etype)
                 turn_info = f" [magenta]T{e.turn_id}[/]" if e.turn_id is not None else ""
                 seq_prefix = f"[dim]#{seq}[/]{turn_info}"
+
+                label = etype
                 if "Decision" in etype:
                     status = e.payload.get("status", "")
-                    text = e.payload.get("text", "")[:30]
-                    if status == "blocked":
-                        lines.append(f"{seq_prefix} [red bold]Decision BLOCKED[/]")
-                        lines.append(f"     [dim]{text}...[/]")
-                    else:
-                        lines.append(f"{seq_prefix} [green]Decision committed[/]")
-                        lines.append(f"     [dim]{text}...[/]")
+                    if status:
+                        label = f"{etype} ({status})"
                 elif "Constraint" in etype:
                     priority = e.payload.get("priority", "")
-                    text = e.payload.get("text", "")[:30]
-                    if priority == "required":
-                        lines.append(f"{seq_prefix} [red]Constraint added (required)[/]")
-                    else:
-                        lines.append(f"{seq_prefix} [yellow]Constraint added[/]")
-                    lines.append(f"     [dim]{text}...[/]")
-                elif "Fact" in etype:
-                    key = e.payload.get("key", "?")
-                    value = str(e.payload.get("value", ""))[:20]
-                    lines.append(f"{seq_prefix} [cyan]Fact recorded[/]")
-                    lines.append(f"     [dim]{key} = {value}[/]")
-                elif "Query" in etype:
-                    lines.append(f"{seq_prefix} [blue]Memory queried[/]")
-                elif "Simulate" in etype:
-                    lines.append(f"{seq_prefix} [magenta]Timeline simulated[/]")
-                else:
-                    lines.append(f"[dim]#{seq}{turn_info} {etype}[/]")
+                    if priority:
+                        label = f"{etype} ({priority})"
+
+                lines.append(f"{seq_prefix} [{color}]{label}[/]")
+
+                details = []
+                payload_summary = self._payload_summary(e.payload)
+                if payload_summary:
+                    details.append(payload_summary)
+                if e.caused_by is not None:
+                    details.append(f"by #{e.caused_by}")
+                if e.correlation_id:
+                    details.append(f"corr {str(e.correlation_id)[:8]}")
+                if details:
+                    lines.append(f"     [dim]{' | '.join(details)}[/]")
             events_content.update("\n".join(lines))
         else:
             events_content.update("[dim]No events yet[/]")
 
 
-def main(script_name: str | None = None, auto: bool = False, db_path: str | None = None, debug: bool = False):
+def main(script_name: str | None = None, auto: bool = False, db_path: str | None = None, debug: bool = False, recording: bool = False):
     """Run the demo TUI."""
+    # If already recording, just run the app
+    if recording or os.environ.get("DML_RECORDING"):
+        app = DemoApp(script_name=script_name, auto_advance=auto, db_path=db_path, debug=debug)
+        app.run()
+        if debug:
+            print(f"\nDebug log written to: ~/.dml/demo-debug.log")
+        return
+
+    # Normal run - check if user wants to record
     app = DemoApp(script_name=script_name, auto_advance=auto, db_path=db_path, debug=debug)
-    app.run()
-    if debug:
+    result = app.run()
+
+    # Handle recording request
+    if isinstance(result, tuple) and result[0] == "record":
+        output_file = result[1]
+        print(f"\n🎬 Starting recording to: {output_file}")
+        print("Press Ctrl+D or type 'exit' when done to stop recording.\n")
+
+        # Build command to relaunch inside asciinema
+        import sys
+        cmd = [
+            "asciinema", "rec",
+            "--stdin",  # Record stdin for interactive feel
+            "-c", f"DML_RECORDING=1 uv run dml live",
+            output_file
+        ]
+
+        try:
+            subprocess.run(cmd, check=True)
+            print(f"\n✅ Recording saved to: {output_file}")
+            print(f"   Upload with: asciinema upload {output_file}")
+            print(f"   Play with:   asciinema play {output_file}")
+        except subprocess.CalledProcessError as e:
+            print(f"\n❌ Recording failed: {e}")
+        except KeyboardInterrupt:
+            print(f"\n⏹️  Recording stopped. File saved to: {output_file}")
+
+    elif debug:
         print(f"\nDebug log written to: ~/.dml/demo-debug.log")
 
 

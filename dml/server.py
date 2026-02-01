@@ -14,7 +14,30 @@ from dml.memory_api import MemoryAPI
 from dml.policy import PolicyEngine, WriteProposal
 from dml.projections import ProjectionEngine
 from dml.replay import ReplayEngine
-from dml.tracing import init_tracing
+from dml.tracing import init_tracing, TracedEventStore, TracedMemoryAPI, WEAVE_AVAILABLE
+
+
+def _load_dotenv() -> None:
+    """Load .env file from project directory for WANDB_API_KEY etc."""
+    # Try multiple locations for .env
+    candidates = [
+        Path(__file__).parent.parent / ".env",  # Project root
+        Path.home() / ".dml" / ".env",  # DML config directory
+        Path.cwd() / ".env",  # Current working directory
+    ]
+    for env_path in candidates:
+        if env_path.exists():
+            with open(env_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, _, value = line.partition("=")
+                        os.environ.setdefault(key.strip(), value.strip())
+            break  # Use first found .env
+
+
+# Load .env before anything else
+_load_dotenv()
 
 
 def get_default_db_path() -> Path:
@@ -579,15 +602,22 @@ def run_server(db_path: str | None = None) -> None:
     if db_path is None:
         db_path = os.environ.get("DML_DB_PATH", str(get_default_db_path()))
 
-    store = EventStore(db_path)
-    replay_engine = ReplayEngine(store)
-    policy_engine = PolicyEngine()
-    memory_api = MemoryAPI(store)
+    # Check if Weave tracing should be enabled
+    weave_enabled = False
+    if WEAVE_AVAILABLE and (os.environ.get("WANDB_API_KEY") or os.environ.get("WEAVE_PROJECT")):
+        weave_enabled = init_tracing("dml-mcp-server")
 
-    # Optional Weave tracing - skip if not logged in (don't block on interactive prompt)
-    import os
-    if os.environ.get("WANDB_API_KEY") or os.environ.get("WEAVE_PROJECT"):
-        init_tracing("dml-mcp-server")
+    # Use traced wrappers when Weave is enabled
+    base_store = EventStore(db_path)
+    if weave_enabled:
+        store = TracedEventStore(base_store)
+        memory_api = TracedMemoryAPI(MemoryAPI(store))
+    else:
+        store = base_store
+        memory_api = MemoryAPI(base_store)
+
+    replay_engine = ReplayEngine(base_store)  # Replay uses base store
+    policy_engine = PolicyEngine()
 
     # Run server
     import asyncio
