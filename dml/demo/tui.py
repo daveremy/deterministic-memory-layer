@@ -207,6 +207,7 @@ class ChatMessage(Static):
 class DemoApp(App):
     """Textual app for DML demo with scrolling chat."""
 
+    TITLE = "Deterministic Memory Layer Demo"
     CSS = CSS
     BINDINGS = [
         ("q", "quit", "Quit"),

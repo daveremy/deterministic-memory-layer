@@ -160,3 +160,118 @@ simple:
 
   outro: |
     DML: Structured memory with enforcement.
+
+# High-stakes medical scenario - life/death consequences
+clinical:
+  name: "Clinical Decision Support"
+  description: "Medical scenario where constraints prevent dangerous prescriptions"
+
+  intro: |
+    This is a LIVE demo - real Claude, real responses.
+
+    Claude is connected to the DML MCP server and using the DML skill.
+    The prompts are scripted, but Claude's responses are not.
+
+    SCENARIO: Clinical decision support for medication management.
+    In healthcare, forgotten allergies kill patients. Traditional chatbots
+    bury critical information in conversation history.
+
+    DML enforces safety constraints mathematically.
+    Watch what happens when we try to prescribe a dangerous medication.
+
+  prompts:
+    - prompt: |
+        New patient intake. Record these facts:
+        Patient: Margaret Chen, 67 years old, female.
+        Current medications: Lisinopril 10mg, Metformin 500mg.
+        Conditions: Type 2 diabetes, hypertension.
+        Primary care physician: Dr. Sarah Williams.
+      narrator: |
+        PATIENT RECORD CREATED
+
+        Structured facts captured with full provenance.
+        Unlike an EHR note buried in text, these are queryable,
+        auditable data points that persist across the conversation.
+
+    - prompt: |
+        Important allergy information - add a required constraint:
+        Patient has a severe penicillin allergy. Anaphylaxis risk.
+        This must block any penicillin-class antibiotics.
+      narrator: |
+        CRITICAL SAFETY CONSTRAINT
+
+        This isn't a note in a chart that might be overlooked.
+        It's a mathematically enforced rule. Any decision involving
+        penicillin-class drugs will be automatically blocked.
+
+        In traditional systems, this allergy might be missed during
+        a busy shift or system migration. DML makes it impossible.
+
+    - prompt: |
+        Patient presents with bacterial sinusitis. Standard treatment
+        would be amoxicillin. Record a decision to prescribe
+        Amoxicillin 500mg three times daily for 10 days.
+      narrator: |
+        PRESCRIPTION BLOCKED - LIFE SAVED
+
+        Amoxicillin is a penicillin-class antibiotic.
+        The prescription was BLOCKED before it could be written.
+
+        This isn't Claude "being careful" - it's the policy engine
+        mathematically preventing a constraint violation. The system
+        cannot prescribe this medication, regardless of how it's asked.
+
+        In a real hospital, this could prevent a fatal anaphylactic reaction.
+
+    - prompt: |
+        You're right, I forgot about the allergy. Check the patient's
+        constraints and recommend a safe alternative antibiotic.
+      narrator: |
+        SAFE ALTERNATIVE FOUND
+
+        Claude queried memory, confirmed the penicillin constraint,
+        and recommended a macrolide antibiotic (like azithromycin)
+        that's safe for penicillin-allergic patients.
+
+        The audit trail shows exactly why amoxicillin was rejected
+        and how the alternative was selected.
+
+    - prompt: |
+        Good catch. Record a decision to prescribe azithromycin
+        250mg, take two on day one then one daily for four more days.
+      narrator: |
+        SAFE PRESCRIPTION RECORDED
+
+        This prescription passed all constraint checks.
+        The decision is logged with full provenance - who prescribed it,
+        when, and verification that safety constraints were satisfied.
+
+    - prompt: |
+        For the audit log - use simulate_timeline to verify:
+        if the allergy had been recorded from the start,
+        would amoxicillin have ever been possible to prescribe?
+      narrator: |
+        DETERMINISTIC AUDIT TRAIL
+
+        DML replayed the entire timeline with the constraint
+        present from the beginning. Result: amoxicillin would have
+        been blocked immediately, before any recommendation.
+
+        This isn't AI speculation - it's cryptographically verifiable
+        replay of the decision history. Perfect for medical audits,
+        malpractice defense, and regulatory compliance.
+
+  outro: |
+    DETERMINISTIC MEMORY LAYER - CLINICAL APPLICATIONS
+
+    You just saw constraint enforcement that could save lives:
+
+    • Drug allergies enforced mathematically, not by memory
+    • Prescriptions blocked BEFORE they can cause harm
+    • Complete audit trail for every clinical decision
+    • Deterministic replay for legal and regulatory review
+
+    When the stakes are life and death,
+    you need more than a chatbot's best guess.
+
+    DML: Structured memory with mathematical guarantees.
