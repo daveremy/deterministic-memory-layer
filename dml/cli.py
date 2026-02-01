@@ -968,6 +968,97 @@ exec $SHELL
     os.unlink(script_path)
 
 
+@cli.command("auto-demo")
+@click.option("--delay", default=15, help="Seconds to wait between messages")
+def auto_demo(delay: int) -> None:
+    """Run automated demo script (sends inputs to running tmux session)."""
+    import subprocess
+    import time as time_module
+
+    session = "dml-demo"
+    pane = f"{session}:0.0"
+
+    # Check if tmux session exists
+    result = subprocess.run(
+        ["tmux", "has-session", "-t", session],
+        capture_output=True
+    )
+    if result.returncode != 0:
+        click.echo("Error: No dml-demo tmux session found.")
+        click.echo("First run: uv run dml live-demo")
+        click.echo("Then start Claude with: claude --dangerously-skip-permissions")
+        click.echo("Then in another terminal: uv run dml auto-demo")
+        return
+
+    def send(text: str, wait: int):
+        """Send text to tmux pane and wait."""
+        click.echo(f">>> {text[:60]}{'...' if len(text) > 60 else ''}")
+        subprocess.run(["tmux", "send-keys", "-t", pane, text, "Enter"])
+        click.echo(f"    (waiting {wait}s for response...)")
+        time_module.sleep(wait)
+
+    click.echo("")
+    click.echo("=" * 60)
+    click.echo("  DML AUTOMATED DEMO")
+    click.echo("=" * 60)
+    click.echo("")
+    click.echo("Starting in 5 seconds... Switch to tmux window to watch!")
+    time_module.sleep(5)
+
+    # Act 1: Quick Setup
+    click.echo("\n--- ACT 1: SETUP ---")
+    send(
+        "I need to plan a trip to Japan. Quick facts: budget $4000, spring 2026, "
+        "traveling from Tucson. I love traditional Japanese culture.",
+        delay
+    )
+
+    send(
+        "I'd love to stay at a traditional ryokan. Can you recommend one and book it?",
+        delay + 5
+    )
+
+    # Act 2: The Twist
+    click.echo("\n--- ACT 2: THE TWIST ---")
+    send(
+        "Oh wait, I forgot to mention something important - my mom is joining me "
+        "and she uses a wheelchair. We need everything to be wheelchair accessible.",
+        delay
+    )
+
+    # Act 3: The Block
+    click.echo("\n--- ACT 3: THE BLOCK ---")
+    send(
+        "I'm sure the ryokan will be fine. Go ahead and confirm the Ryokan Kurashiki booking.",
+        delay + 5
+    )
+
+    # Act 4: Recovery
+    click.echo("\n--- ACT 4: RECOVERY ---")
+    send(
+        "Okay, what are my options then? Can you check what we need and find accessible alternatives?",
+        delay + 5
+    )
+
+    send(
+        "The accessible onsen hotel sounds perfect. Book that one.",
+        delay
+    )
+
+    # Act 5: Time Travel
+    click.echo("\n--- ACT 5: TIME TRAVEL ---")
+    send(
+        "I'm curious - what would have happened if we'd known about the wheelchair "
+        "requirement from the very beginning? Would you have ever suggested that ryokan?",
+        delay + 10
+    )
+
+    click.echo("")
+    click.echo("=" * 60)
+    click.echo("  DEMO COMPLETE!")
+    click.echo("=" * 60)
+
+
 @cli.command()
 @click.option("--init", "do_init", is_flag=True, help="Initialize DB if it doesn't exist")
 def serve(do_init: bool) -> None:
