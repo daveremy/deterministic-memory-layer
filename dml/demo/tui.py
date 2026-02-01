@@ -152,6 +152,50 @@ LoadingIndicator {
     color: $warning;
     text-style: italic;
 }
+
+#intro-overlay {
+    layer: overlay;
+    width: 100%;
+    height: 100%;
+    background: $surface;
+    padding: 2 4;
+}
+
+#intro-overlay.hidden {
+    display: none;
+}
+
+#intro-title {
+    text-align: center;
+    text-style: bold;
+    color: $primary;
+    padding: 1;
+}
+
+#intro-content {
+    padding: 2 4;
+    color: $text;
+}
+
+#intro-prompt {
+    text-align: center;
+    text-style: bold;
+    color: $success;
+    padding: 2;
+}
+
+#outro-overlay {
+    layer: overlay;
+    width: 100%;
+    height: 100%;
+    background: $surface;
+    padding: 2 4;
+    display: none;
+}
+
+#outro-overlay.visible {
+    display: block;
+}
 """
 
 
@@ -178,12 +222,12 @@ class DemoApp(App):
     def __init__(
         self,
         script_name: str = "japan_trip",
-        pause_between: bool = False,
+        auto_advance: bool = False,
         db_path: str | None = None,
     ):
         super().__init__()
         self.script_name = script_name
-        self.pause_between = pause_between
+        self.auto_advance = auto_advance
         self.db_path = db_path or str(Path.home() / ".dml" / "memory.db")
         self.script = None
         self.prompts = []
@@ -228,6 +272,16 @@ class DemoApp(App):
         yield Static("Press SPACE to start, Q to quit", id="status-bar")
         yield Footer()
 
+        # Intro overlay (shown on top initially)
+        with Vertical(id="intro-overlay"):
+            yield Static("", id="intro-title")
+            yield Static("", id="intro-content")
+            yield Static(">>> Press SPACE to start <<<", id="intro-prompt")
+
+        # Outro overlay (hidden initially)
+        with Vertical(id="outro-overlay"):
+            yield Static("", id="outro-content")
+
     def on_mount(self) -> None:
         """Called when app is mounted."""
         # Load script
@@ -245,13 +299,20 @@ class DemoApp(App):
             capture_output=True
         )
 
-        # Update narrator with intro
-        narrator = self.query_one("#narrator-content", Static)
+        # Populate intro overlay
+        intro_title = self.query_one("#intro-title", Static)
+        intro_content = self.query_one("#intro-content", Static)
+        intro_title.update(f"[bold]{script_name}[/]")
         intro = self.script.get("intro", "").strip()
         if intro:
-            narrator.update(f"{intro}\n\n[bold green]>>> Press SPACE to start <<<[/]")
+            intro_content.update(intro)
         else:
-            narrator.update(f"[bold]{script_name}[/]\n\n{len(self.prompts)} prompts\n\n[bold green]>>> Press SPACE to start <<<[/]")
+            intro_content.update(f"{len(self.prompts)} prompts in this demo.")
+
+        # Populate outro overlay
+        outro_content = self.query_one("#outro-content", Static)
+        outro = self.script.get("outro", "Demo complete!").strip()
+        outro_content.update(outro)
 
         # Start DML state refresh
         self.set_interval(0.5, self.refresh_dml_state)
@@ -266,14 +327,18 @@ class DemoApp(App):
             return  # Already running a prompt
 
         if not self.demo_started:
-            # First press - reset and start
+            # First press - hide intro and start
             self.demo_started = True
+            intro_overlay = self.query_one("#intro-overlay")
+            intro_overlay.add_class("hidden")
             self.reset_demo()
             self.run_next_prompt()
         elif self.current_prompt_index < len(self.prompts):
             self.run_next_prompt()
         else:
-            self.notify("Demo complete!", severity="information")
+            # Show outro overlay
+            outro_overlay = self.query_one("#outro-overlay")
+            outro_overlay.add_class("visible")
 
     def reset_demo(self) -> None:
         """Reset DML database for fresh demo."""
@@ -335,21 +400,37 @@ class DemoApp(App):
         await chat_scroll.mount(Markdown(response, classes="claude-response"))
         chat_scroll.scroll_end(animate=False)
 
-        # Update narrator with commentary
-        if narrator_text:
-            narrator.update(narrator_text + "\n\n[bold green]>>> Press SPACE to continue <<<[/]")
-        else:
-            narrator.update("[bold green]>>> Press SPACE to continue <<<[/]")
-
         # Update status
         self.current_prompt_index += 1
-        if self.current_prompt_index >= len(self.prompts):
-            status_bar.update("[bold]Demo complete![/] Press Q to quit.")
-            narrator.update(self.script.get("outro", "Demo complete!"))
+        is_complete = self.current_prompt_index >= len(self.prompts)
+
+        if is_complete:
+            status_bar.update("[bold]Demo complete![/] Press SPACE to see summary, Q to quit.")
+            if narrator_text:
+                narrator.update(narrator_text)
+            else:
+                narrator.update("[bold]Demo complete![/]")
         else:
-            status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Press SPACE for next prompt")
+            # Update narrator with commentary
+            if self.auto_advance:
+                if narrator_text:
+                    narrator.update(narrator_text + "\n\n[dim]Auto-advancing in 5 seconds...[/]")
+                else:
+                    narrator.update("[dim]Auto-advancing in 5 seconds...[/]")
+                status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Auto-advancing...")
+            else:
+                if narrator_text:
+                    narrator.update(narrator_text + "\n\n[bold green]>>> Press SPACE to continue <<<[/]")
+                else:
+                    narrator.update("[bold green]>>> Press SPACE to continue <<<[/]")
+                status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Press SPACE for next prompt")
 
         self.is_running = False
+
+        # Auto-advance after delay if enabled
+        if self.auto_advance and not is_complete:
+            await asyncio.sleep(5)
+            self.run_next_prompt()
 
     async def run_claude(self, prompt: str, continue_session: bool = False) -> str:
         """Run claude -p command asynchronously."""
@@ -447,9 +528,9 @@ class DemoApp(App):
             events_content.update("(waiting...)")
 
 
-def main(script_name: str = "japan_trip", pause: bool = False, db_path: str | None = None):
+def main(script_name: str = "japan_trip", auto: bool = False, db_path: str | None = None):
     """Run the demo TUI."""
-    app = DemoApp(script_name=script_name, pause_between=pause, db_path=db_path)
+    app = DemoApp(script_name=script_name, auto_advance=auto, db_path=db_path)
     app.run()
 
 
