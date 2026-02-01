@@ -1001,7 +1001,9 @@ def auto_demo(delay: int) -> None:
     def send(text: str, wait: int):
         """Send text to tmux pane and wait."""
         click.echo(f">>> {text[:60]}{'...' if len(text) > 60 else ''}")
-        subprocess.run(["tmux", "send-keys", "-t", pane, text, "Enter"])
+        # Send text literally, then send Enter key separately
+        subprocess.run(["tmux", "send-keys", "-t", pane, "-l", text])
+        subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"])
         click.echo(f"    (waiting {wait}s for response...)")
         time_module.sleep(wait)
 
@@ -1010,8 +1012,13 @@ def auto_demo(delay: int) -> None:
     click.echo("  DML AUTOMATED DEMO")
     click.echo("=" * 60)
     click.echo("")
-    click.echo("Starting in 5 seconds... Switch to tmux window to watch!")
-    time_module.sleep(5)
+    click.echo("Make sure Claude is running in the tmux pane!")
+    click.echo("(You should see the Claude Code prompt ready for input)")
+    click.echo("")
+    click.confirm("Is Claude ready?", abort=True)
+    click.echo("")
+    click.echo("Starting in 3 seconds... Switch to tmux window to watch!")
+    time_module.sleep(3)
 
     # Act 1: Quick Setup
     click.echo("\n--- ACT 1: SETUP ---")
