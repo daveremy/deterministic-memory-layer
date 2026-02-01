@@ -47,6 +47,11 @@ Constraint-aware reasoning catches a conflict between a traditional ryokan booki
 
 Multi-phase scenario with evolving budget, dates, and constraints. Shows drift analysis, provenance traces, and counterfactual "what if" analysis across 15 prompts.
 
+### Clinical: High-Stakes Decision Support
+[![asciicast](https://asciinema.org/a/C7MG4qOxXLdi4GZc.svg)](https://asciinema.org/a/C7MG4qOxXLdi4GZc)
+
+Drug allergy constraint prevents dangerous prescription. Shows how structured memory catches conflicts that conversation context might miss.
+
 ---
 
 ## The Idea
