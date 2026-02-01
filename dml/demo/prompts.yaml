@@ -30,6 +30,11 @@ japan_trip:
         I've got about $4000 saved up. Flying from Tucson.
         I'm really into traditional Japanese culture - temples, gardens,
         that sort of thing. Can you record all that?
+      context: |
+        The user shares their trip details with Claude.
+
+        Watch the Facts panel on the right - these details will be
+        captured as structured data, not just conversation text.
       narrator: |
         STRUCTURED MEMORY
 
@@ -42,6 +47,11 @@ japan_trip:
         I definitely want the authentic experience - a traditional ryokan
         with tatami rooms and onsen baths. Find me a good one in Kyoto
         and book it. I trust your judgment!
+      context: |
+        The user asks Claude to find and book a traditional Japanese inn.
+
+        Claude will make a recommendation and record a DECISION -
+        a tracked commitment that can be audited later.
       narrator: |
         DECISION RECORDED
 
@@ -55,6 +65,11 @@ japan_trip:
         Oh wait, important thing - my mom is coming with me and she
         uses a wheelchair. Add a constraint that everything must be
         wheelchair accessible. This is a hard requirement.
+      context: |
+        The user reveals a critical requirement AFTER the booking.
+
+        This accessibility need will become a CONSTRAINT - a rule
+        that the policy engine enforces mathematically.
       narrator: |
         CONSTRAINT ADDED
 
@@ -67,6 +82,11 @@ japan_trip:
     - prompt: |
         Actually, you know what, let's just confirm that ryokan booking.
         Record a decision to finalize the Ryokan Kurashiki reservation.
+      context: |
+        The user tries to confirm the original ryokan booking.
+
+        But traditional ryokans have stairs and no elevators...
+        Will the policy engine allow this decision?
       narrator: |
         BLOCKED BY POLICY ENGINE
 
@@ -81,6 +101,11 @@ japan_trip:
         You're right, that won't work. Check my constraints and find
         me an accessible alternative. Something with the onsen experience
         but wheelchair friendly.
+      context: |
+        The user asks Claude to find an alternative that works.
+
+        Claude will query its memory to check constraints before
+        making a new recommendation.
       narrator: |
         RECOVERY WITH MEMORY
 
@@ -91,6 +116,11 @@ japan_trip:
     - prompt: |
         That accessible onsen hotel sounds perfect. Record a decision
         to book that one instead.
+      context: |
+        The user confirms the accessible alternative.
+
+        This decision should pass all constraint checks and be
+        committed to the immutable event log.
       narrator: |
         VALID DECISION COMMITTED
 
@@ -102,6 +132,11 @@ japan_trip:
         I'm curious about something. Use simulate_timeline to check -
         if I had mentioned the wheelchair requirement at the very start,
         would you have ever suggested that traditional ryokan?
+      context: |
+        The user asks a "what if" question about the past.
+
+        DML can simulate alternate timelines - replaying history
+        with different constraints to see what would have happened.
       narrator: |
         TIME TRAVEL / COUNTERFACTUAL ANALYSIS
 
@@ -140,6 +175,11 @@ simple:
     - prompt: |
         Hi! Record these facts about me: my name is Alice,
         I'm vegetarian, and I live in Portland.
+      context: |
+        The user introduces themselves with basic facts.
+
+        Watch the Facts panel - these will be captured as
+        structured, queryable data.
       narrator: |
         Facts captured: name, diet, and location.
         These are structured data, not just text.
@@ -147,6 +187,11 @@ simple:
     - prompt: |
         Add a required constraint: all restaurant recommendations
         must have good vegetarian options.
+      context: |
+        The user adds a dietary requirement as a constraint.
+
+        This becomes a rule that the policy engine will enforce
+        on all future decisions.
       narrator: |
         Constraint added. This rule will be enforced
         on all future decisions.
@@ -154,6 +199,11 @@ simple:
     - prompt: |
         Great! Now record a decision to go to Smith's Steakhouse
         for dinner tonight.
+      context: |
+        The user tries to book a steakhouse for dinner.
+
+        Will the policy engine allow this decision given
+        the vegetarian constraint?
       narrator: |
         BLOCKED - the steakhouse decision violates
         the vegetarian constraint.
@@ -186,6 +236,11 @@ clinical:
         Current medications: Lisinopril 10mg, Metformin 500mg.
         Conditions: Type 2 diabetes, hypertension.
         Primary care physician: Dr. Sarah Williams.
+      context: |
+        A clinician enters patient information into the system.
+
+        Watch the Facts panel - patient details are captured as
+        structured, queryable medical records.
       narrator: |
         PATIENT RECORD CREATED
 
@@ -197,6 +252,11 @@ clinical:
         Important allergy information - add a required constraint:
         Patient has a severe penicillin allergy. Anaphylaxis risk.
         This must block any penicillin-class antibiotics.
+      context: |
+        Critical safety information: the patient has a drug allergy.
+
+        This becomes a REQUIRED constraint - the policy engine will
+        block any prescription that could trigger anaphylaxis.
       narrator: |
         CRITICAL SAFETY CONSTRAINT
 
@@ -211,6 +271,11 @@ clinical:
         Patient presents with bacterial sinusitis. Standard treatment
         would be amoxicillin. Record a decision to prescribe
         Amoxicillin 500mg three times daily for 10 days.
+      context: |
+        The clinician attempts to prescribe the standard treatment.
+
+        But amoxicillin is a penicillin-class antibiotic...
+        Will the policy engine catch the danger?
       narrator: |
         PRESCRIPTION BLOCKED - LIFE SAVED
 
@@ -226,6 +291,11 @@ clinical:
     - prompt: |
         You're right, I forgot about the allergy. Check the patient's
         constraints and recommend a safe alternative antibiotic.
+      context: |
+        The clinician asks for a safe alternative.
+
+        Claude will query memory to check constraints before
+        recommending a different antibiotic.
       narrator: |
         SAFE ALTERNATIVE FOUND
 
@@ -239,6 +309,11 @@ clinical:
     - prompt: |
         Good catch. Record a decision to prescribe azithromycin
         250mg, take two on day one then one daily for four more days.
+      context: |
+        The clinician prescribes the safe alternative.
+
+        This prescription should pass all constraint checks
+        and be recorded with full audit trail.
       narrator: |
         SAFE PRESCRIPTION RECORDED
 
@@ -250,6 +325,12 @@ clinical:
         For the audit log - use simulate_timeline to verify:
         if the allergy had been recorded from the start,
         would amoxicillin have ever been possible to prescribe?
+      context: |
+        For compliance and audit purposes, the clinician asks
+        a counterfactual question about the timeline.
+
+        DML can replay history with different constraint ordering
+        to prove what would have happened.
       narrator: |
         DETERMINISTIC AUDIT TRAIL
 

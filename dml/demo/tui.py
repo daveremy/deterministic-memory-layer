@@ -444,6 +444,7 @@ class DemoApp(App):
         self.is_running = True
         prompt_data = self.prompts[self.current_prompt_index]
         prompt = prompt_data.get("prompt", "").strip()
+        context_text = prompt_data.get("context", "").strip()
         narrator_text = prompt_data.get("narrator", "").strip()
 
         # Get UI elements
@@ -453,11 +454,16 @@ class DemoApp(App):
         loading_status = self.query_one("#loading-status", Static)
         chat_scroll = self.query_one("#chat-scroll", VerticalScroll)
 
+        # Show context in narrator before sending
+        if context_text:
+            narrator.update(context_text)
+        else:
+            narrator.update(f"[dim]Sending prompt {self.current_prompt_index + 1}...[/]")
+
         # Show loading indicator
         loading_container.add_class("visible")
-        loading_status.update(f"Sending prompt {self.current_prompt_index + 1}/{len(self.prompts)}...")
-        narrator.update(f"[dim]Sending message to Claude...[/]")
-        status_bar.update(f"[{self.current_prompt_index + 1}/{len(self.prompts)}] Waiting for Claude...")
+        loading_status.update(f"Prompt {self.current_prompt_index + 1}/{len(self.prompts)}")
+        status_bar.update(f"[{self.current_prompt_index + 1}/{len(self.prompts)}] Sending to Claude...")
 
         # Add user message to chat with > prefix
         user_lines = prompt.split('\n')
