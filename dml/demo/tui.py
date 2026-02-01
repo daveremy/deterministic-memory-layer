@@ -1,4 +1,4 @@
-"""Demo TUI that runs real Claude prompts with DML monitor."""
+"""Demo TUI that runs real Claude prompts with DML monitor and narrator."""
 
 import subprocess
 import time
@@ -6,22 +6,23 @@ from pathlib import Path
 from dataclasses import dataclass, field
 
 import yaml
-from rich.console import Console
+from rich.console import Console, Group
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.text import Text
 from rich.live import Live
-from rich.box import ROUNDED, DOUBLE
+from rich.box import ROUNDED, DOUBLE, HEAVY
+from rich.align import Align
+from rich.padding import Padding
 
 from dml.events import EventStore
 from dml.replay import ReplayEngine
 
 
-def load_demo_prompts(name: str = "japan_trip") -> tuple[dict, list[dict]]:
-    """Load prompts from YAML file.
+def load_demo_prompts(name: str = "japan_trip") -> dict:
+    """Load a demo script from YAML file.
 
-    Returns:
-        Tuple of (script_info, prompts) where script_info contains name/description.
+    Returns full script dict with intro, prompts, outro, etc.
     """
     prompts_file = Path(__file__).parent / "prompts.yaml"
     if not prompts_file.exists():
@@ -31,24 +32,19 @@ def load_demo_prompts(name: str = "japan_trip") -> tuple[dict, list[dict]]:
     if name not in data:
         available = list(data.keys())
         raise KeyError(f"Demo script '{name}' not found. Available: {available}")
-    script = data[name]
-    return script, script["prompts"]
-
-
-# Chat bubble width for rendering
-BUBBLE_WIDTH = 58
+    return data[name]
 
 
 @dataclass
-class ChatMessage:
-    """A message in the chat."""
-    role: str  # "user" or "assistant"
-    content: str
-    tool_calls: list[str] = field(default_factory=list)
+class ConversationTurn:
+    """A single turn in the conversation."""
+    user_input: str
+    claude_response: str = ""
+    narrator: str = ""
 
 
 class DemoTUI:
-    """Demo TUI that runs real Claude prompts with live DML monitor."""
+    """Demo TUI that looks like real Claude CLI with narrator and DML monitor."""
 
     def __init__(
         self,
@@ -57,8 +53,9 @@ class DemoTUI:
         db_path: str | None = None,
     ):
         self.console = Console()
-        self.messages: list[ChatMessage] = []
-        self.status = "Ready"
+        self.turns: list[ConversationTurn] = []
+        self.current_narrator: str = ""
+        self.status: str = ""
         self.script_name = script_name
         self.pause_between = pause_between
 
@@ -69,7 +66,7 @@ class DemoTUI:
 
     def run_claude_prompt(self, prompt: str, continue_session: bool = False) -> str:
         """Run claude -p and return response."""
-        cmd = ["claude", "-p", prompt, "--allowedTools", "mcp__dml__*"]
+        cmd = ["claude", "-p", prompt.strip(), "--allowedTools", "mcp__dml__*"]
         if continue_session:
             cmd.append("-c")
 
@@ -98,72 +95,61 @@ class DemoTUI:
         except Exception:
             return None, []
 
-    def _render_chat_message(self, msg: ChatMessage) -> Text:
-        """Render a single chat message with bubble styling."""
-        result = Text()
-        inner_width = BUBBLE_WIDTH - 4  # Account for "| " and " |"
-
-        # Simple word-wrap
-        def wrap_text(text: str, width: int) -> list[str]:
-            words = text.split()
-            lines = []
-            current_line = ""
-            for word in words:
-                if len(current_line) + len(word) + 1 <= width:
-                    current_line += (" " if current_line else "") + word
-                else:
-                    if current_line:
-                        lines.append(current_line)
-                    current_line = word
-            if current_line:
-                lines.append(current_line)
-            return lines if lines else [""]
-
-        if msg.role == "user":
-            result.append("You\n", style="bold bright_cyan")
-            result.append("+" + "-" * (BUBBLE_WIDTH - 2) + "+\n", style="cyan")
-
-            for line in wrap_text(msg.content, inner_width):
-                padded = f"| {line}".ljust(BUBBLE_WIDTH - 1) + "|\n"
-                result.append(padded, style="cyan")
-
-            result.append("+" + "-" * (BUBBLE_WIDTH - 2) + "+\n", style="cyan")
-
-        else:
-            result.append("Claude\n", style="bold bright_green")
-            result.append("+" + "-" * (BUBBLE_WIDTH - 2) + "+\n", style="green")
-
-            # Truncate long responses for display
-            content = msg.content
-            if len(content) > 500:
-                content = content[:500] + "..."
-
-            for line in wrap_text(content, inner_width):
-                padded = f"| {line}".ljust(BUBBLE_WIDTH - 1) + "|\n"
-                result.append(padded, style="green")
-
-            result.append("+" + "-" * (BUBBLE_WIDTH - 2) + "+\n", style="green")
-
-        return result
-
     def _make_chat_panel(self) -> Panel:
-        """Create the main chat panel."""
+        """Create chat panel that looks like Claude CLI."""
         content = Text()
 
-        # Show last few messages
-        for msg in self.messages[-4:]:
-            content.append(self._render_chat_message(msg))
+        # Show conversation turns
+        visible_turns = self.turns[-3:]  # Show last 3 turns to fit
+        for turn in visible_turns:
+            # User input with > prefix (like Claude CLI)
+            for i, line in enumerate(turn.user_input.strip().split('\n')):
+                if i == 0:
+                    content.append("> ", style="bright_green bold")
+                else:
+                    content.append("  ", style="bright_green")
+                content.append(line + "\n", style="white")
             content.append("\n")
 
-        # Status at bottom
-        content.append(f"\n[{self.status}]", style="dim italic")
+            # Claude response
+            if turn.claude_response:
+                # Show full response, preserve formatting
+                response_lines = turn.claude_response.split('\n')
+                for line in response_lines:
+                    content.append(line + "\n", style="white")
+                content.append("\n")
+
+        # Status line at bottom
+        if self.status:
+            content.append(self.status, style="dim italic")
 
         return Panel(
             content,
-            title="[bold bright_white]Chat[/]",
-            subtitle="[dim]Claude + DML[/]",
+            title="[bold white]claude[/]",
             border_style="bright_blue",
-            box=DOUBLE,
+            box=ROUNDED,
+            padding=(0, 1),
+        )
+
+    def _make_narrator_panel(self) -> Panel:
+        """Create narrator panel with current commentary."""
+        if not self.current_narrator:
+            content = Text("Watching the conversation...", style="dim italic")
+        else:
+            content = Text()
+            lines = self.current_narrator.strip().split('\n')
+
+            # First line is usually the title
+            if lines:
+                content.append(lines[0] + "\n\n", style="bold bright_yellow")
+                for line in lines[1:]:
+                    content.append(line + "\n", style="white")
+
+        return Panel(
+            content,
+            title="[bold bright_yellow]Narrator[/]",
+            border_style="yellow",
+            box=HEAVY,
             padding=(0, 1),
         )
 
@@ -174,11 +160,16 @@ class DemoTUI:
         if state is None or not state.facts:
             content.append("(waiting...)", style="dim")
         else:
-            for key, fact in state.facts.items():
+            for key, fact in list(state.facts.items())[:8]:  # Limit to 8
                 content.append(f"{key}: ", style="cyan bold")
                 content.append(f"{fact.value}\n", style="white")
 
-        return Panel(content, title="[bold]Facts[/]", border_style="blue")
+        return Panel(
+            content,
+            title="[bold]Facts[/]",
+            border_style="blue",
+            box=ROUNDED,
+        )
 
     def _make_constraints_panel(self, state) -> Panel:
         """Create the constraints panel."""
@@ -191,18 +182,21 @@ class DemoTUI:
             if not active:
                 content.append("(none)", style="dim")
             else:
-                for c in active:
-                    if c.priority == "learned":
-                        content.append("* ", style="yellow bold")
-                        content.append(f"{c.text}\n", style="yellow")
-                    elif c.priority == "required":
+                for c in active[:5]:  # Limit to 5
+                    if c.priority == "required":
                         content.append("! ", style="red bold")
-                        content.append(f"{c.text}\n", style="white")
                     else:
                         content.append("o ", style="green")
-                        content.append(f"{c.text}\n", style="dim")
+                    # Truncate long constraints
+                    text = c.text[:40] + "..." if len(c.text) > 40 else c.text
+                    content.append(f"{text}\n", style="white")
 
-        return Panel(content, title="[bold]Constraints[/]", border_style="green")
+        return Panel(
+            content,
+            title="[bold]Constraints[/]",
+            border_style="green",
+            box=ROUNDED,
+        )
 
     def _make_decisions_panel(self, state) -> Panel:
         """Create the decisions panel."""
@@ -214,15 +208,22 @@ class DemoTUI:
             if not state.decisions:
                 content.append("(none)", style="dim")
             else:
-                for d in state.decisions[-5:]:
+                for d in state.decisions[-5:]:  # Last 5
                     if d.status == "blocked":
                         content.append("X ", style="red bold")
-                        content.append(f"{d.text}\n", style="red")
+                        text = d.text[:35] + "..." if len(d.text) > 35 else d.text
+                        content.append(f"{text}\n", style="red")
                     else:
                         content.append("+ ", style="green bold")
-                        content.append(f"{d.text}\n", style="white")
+                        text = d.text[:35] + "..." if len(d.text) > 35 else d.text
+                        content.append(f"{text}\n", style="white")
 
-        return Panel(content, title="[bold]Decisions[/]", border_style="magenta")
+        return Panel(
+            content,
+            title="[bold]Decisions[/]",
+            border_style="magenta",
+            box=ROUNDED,
+        )
 
     def _make_events_panel(self, state, events) -> Panel:
         """Create the events panel."""
@@ -231,47 +232,64 @@ class DemoTUI:
         if not events:
             content.append("(waiting...)", style="dim")
         else:
-            for e in events[-8:]:
+            for e in events[-6:]:  # Last 6 events
                 seq = e.global_seq
                 etype = e.type.value
-                short = etype.replace("Added", "+").replace("Made", "").replace("Memory", "")
 
                 if "Decision" in etype:
                     status = e.payload.get("status", "")
                     if status == "blocked":
-                        content.append(f"{seq:2} {short} ", style="dim")
+                        content.append(f"{seq:2} ", style="dim")
                         content.append("BLOCKED\n", style="red bold")
                     else:
-                        content.append(f"{seq:2} {short} ", style="dim")
-                        content.append("OK\n", style="green")
+                        content.append(f"{seq:2} ", style="dim")
+                        content.append("Decision+\n", style="green")
                 elif "Constraint" in etype:
                     priority = e.payload.get("priority", "")
+                    content.append(f"{seq:2} ", style="dim")
                     if priority == "required":
-                        content.append(f"{seq:2} {short} ", style="dim")
-                        content.append("REQUIRED\n", style="red")
+                        content.append("Constraint!\n", style="red")
                     else:
-                        content.append(f"{seq:2} {short}\n", style="dim")
+                        content.append("Constraint+\n", style="yellow")
                 elif "Fact" in etype:
-                    key = e.payload.get("key", "?")
-                    content.append(f"{seq:2} Fact+ ", style="dim")
-                    content.append(f"{key}\n", style="cyan")
+                    key = e.payload.get("key", "?")[:12]
+                    content.append(f"{seq:2} ", style="dim")
+                    content.append(f"Fact+ {key}\n", style="cyan")
+                elif "Query" in etype:
+                    content.append(f"{seq:2} ", style="dim")
+                    content.append("Query\n", style="bright_blue")
                 else:
+                    short = etype.replace("Memory", "").replace("Added", "+")[:15]
                     content.append(f"{seq:2} {short}\n", style="dim")
 
         seq_display = state.last_seq if state else 0
-        return Panel(content, title=f"[bold]Events[/] [dim]#{seq_display}[/]", border_style="dim")
+        return Panel(
+            content,
+            title=f"[bold]Events[/] [dim]#{seq_display}[/]",
+            border_style="dim",
+            box=ROUNDED,
+        )
 
     def _make_layout(self) -> Layout:
-        """Create the full split layout."""
+        """Create the full layout."""
         state, events = self._get_dml_state()
 
         layout = Layout()
+
+        # Main split: left (chat + narrator) and right (DML monitor)
         layout.split_row(
-            Layout(name="chat", ratio=3),
-            Layout(name="sidebar", ratio=1),
+            Layout(name="left", ratio=2),
+            Layout(name="right", ratio=1),
         )
 
-        layout["sidebar"].split_column(
+        # Left side: chat on top, narrator on bottom
+        layout["left"].split_column(
+            Layout(name="chat", ratio=3),
+            Layout(name="narrator", ratio=1),
+        )
+
+        # Right side: DML panels stacked
+        layout["right"].split_column(
             Layout(name="facts"),
             Layout(name="constraints"),
             Layout(name="decisions"),
@@ -279,6 +297,7 @@ class DemoTUI:
         )
 
         layout["chat"].update(self._make_chat_panel())
+        layout["narrator"].update(self._make_narrator_panel())
         layout["facts"].update(self._make_facts_panel(state))
         layout["constraints"].update(self._make_constraints_panel(state))
         layout["decisions"].update(self._make_decisions_panel(state))
@@ -286,86 +305,127 @@ class DemoTUI:
 
         return layout
 
-    def run(self):
-        """Run the demo."""
-        # Load prompts
-        try:
-            script_info, prompts = load_demo_prompts(self.script_name)
-        except (FileNotFoundError, KeyError) as e:
-            self.console.print(f"[red]Error: {e}[/]")
-            return
-
-        script_name = script_info.get("name", self.script_name)
-
-        # Reset DML first
-        self.console.print(f"[dim]Resetting DML database...[/]")
-        subprocess.run(
-            ["uv", "run", "dml", "reset", "--force"],
-            capture_output=True
-        )
-
-        # Show intro
+    def _show_intro(self, script: dict):
+        """Show intro screen."""
         self.console.clear()
-        intro = Panel(
-            Text.from_markup(
-                f"\n[bold bright_cyan]{script_name}[/]\n\n"
-                f"[white]{script_info.get('description', '')}[/]\n\n"
-                f"[dim]{len(prompts)} prompts will be sent to Claude.[/]\n"
-                f"[dim]Watch the DML monitor panel on the right.[/]\n"
-            ),
-            title="[bold]DML Live Demo[/]",
+
+        intro_text = script.get("intro", "").strip()
+        name = script.get("name", self.script_name)
+
+        content = Text()
+        content.append(f"\n{name}\n", style="bold bright_cyan")
+        content.append("─" * 50 + "\n\n", style="dim")
+        content.append(intro_text + "\n", style="white")
+
+        panel = Panel(
+            Align.center(content),
+            title="[bold]DML Demo[/]",
             border_style="bright_magenta",
             box=DOUBLE,
             padding=(1, 4),
         )
+
         self.console.print()
-        self.console.print(intro)
+        self.console.print(panel)
+        self.console.print()
+        self.console.input("[dim]Press Enter to begin...[/]")
+
+    def _show_outro(self, script: dict):
+        """Show outro screen."""
+        self.console.clear()
+
+        outro_text = script.get("outro", "Demo complete.").strip()
+
+        content = Text()
+        for line in outro_text.split('\n'):
+            if line.strip().startswith('•'):
+                content.append("  " + line + "\n", style="bright_cyan")
+            elif line.strip() and line == line.upper():
+                content.append("\n" + line + "\n\n", style="bold bright_green")
+            else:
+                content.append(line + "\n", style="white")
+
+        panel = Panel(
+            Align.center(content),
+            border_style="bright_green",
+            box=DOUBLE,
+            padding=(1, 4),
+        )
+
+        self.console.print()
+        self.console.print(panel)
         self.console.print()
 
-        if self.pause_between:
-            self.console.input("[dim]Press Enter to start...[/]")
-        else:
-            self.console.print("[dim]Starting in 3 seconds...[/]")
-            time.sleep(3)
+    def run(self):
+        """Run the demo."""
+        # Load script
+        try:
+            script = load_demo_prompts(self.script_name)
+        except (FileNotFoundError, KeyError) as e:
+            self.console.print(f"[red]Error: {e}[/]")
+            return
 
+        prompts = script.get("prompts", [])
+        if not prompts:
+            self.console.print("[red]Error: No prompts in script[/]")
+            return
+
+        # Reset DML first
+        self.console.print("[dim]Resetting DML database...[/]")
+        subprocess.run(
+            ["uv", "run", "dml", "reset", "--force"],
+            capture_output=True
+        )
+        time.sleep(0.5)
+
+        # Show intro
+        self._show_intro(script)
         self.console.clear()
 
         with Live(self._make_layout(), refresh_per_second=4, console=self.console) as live:
 
             for i, prompt_data in enumerate(prompts):
-                prompt = prompt_data["prompt"]
-                desc = prompt_data.get("description", f"Prompt {i+1}")
+                prompt = prompt_data.get("prompt", "").strip()
+                narrator = prompt_data.get("narrator", "").strip()
 
-                # Show user prompt
-                self.status = f"[{i+1}/{len(prompts)}] {desc}"
-                self.messages.append(ChatMessage("user", prompt))
+                # Create new turn with user input
+                turn = ConversationTurn(user_input=prompt)
+                self.turns.append(turn)
+                self.current_narrator = ""
+                self.status = f"Sending message {i+1}/{len(prompts)}..."
                 live.update(self._make_layout())
 
-                # Pause if requested
-                if self.pause_between:
-                    self.console.print()
-                    self.console.input(f"[dim]Press Enter to send prompt {i+1}...[/]")
+                # Small pause to show the user message
+                time.sleep(1)
 
                 # Run Claude
-                self.status = f"[{i+1}/{len(prompts)}] Claude thinking..."
+                self.status = "Claude is thinking..."
                 live.update(self._make_layout())
 
                 response = self.run_claude_prompt(prompt, continue_session=(i > 0))
 
-                # Add response
-                self.messages.append(ChatMessage("assistant", response))
-                self.status = f"[{i+1}/{len(prompts)}] {desc} - Done"
+                # Update turn with response
+                turn.claude_response = response
+                self.status = ""
                 live.update(self._make_layout())
 
-                # Pause between prompts
-                if self.pause_between:
-                    self.console.print()
-                    self.console.input("[dim]Press Enter to continue...[/]")
-                else:
-                    time.sleep(3)
+                # Pause to read response
+                time.sleep(2)
 
-        self.console.print()
-        self.console.print("[bold green]Demo complete![/]")
+                # Show narrator commentary
+                if narrator:
+                    self.current_narrator = narrator
+                    live.update(self._make_layout())
+
+                    if self.pause_between:
+                        self.console.print()
+                        self.console.input("[dim]Press Enter to continue...[/]")
+                    else:
+                        # Auto-advance after reading time
+                        time.sleep(4)
+
+        # Show outro
+        self._show_outro(script)
 
 
 def main(script_name: str = "japan_trip", pause: bool = False, db_path: str | None = None):

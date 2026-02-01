@@ -1,40 +1,135 @@
-# Demo prompt sequences
-# Each sequence is a named list of prompts
+# Demo prompt sequences with natural conversation and narrative
+# Each prompt has: the actual prompt, and narrator commentary
 
 japan_trip:
-  name: "Japan Trip Planning Demo"
-  description: "Shows facts, constraints, blocking, and time travel"
+  name: "Japan Trip Planning"
+  description: "A travel planning conversation that reveals DML's power"
+
+  intro: |
+    You're about to see something different.
+
+    This is Claude with a Deterministic Memory Layer - structured memory
+    that can enforce rules, track decisions, and replay history.
+
+    Watch the right panel. Every fact, constraint, and decision
+    is captured as an immutable event.
+
   prompts:
-    - prompt: "Record these trip facts now: destination Japan, budget $4000, dates spring 2026, origin Tucson, interest traditional Japanese culture. Don't ask questions, just record them."
-      description: "Setup facts"
+    - prompt: |
+        I'm planning a trip to Japan! Thinking spring 2026, maybe 10 days.
+        I've got about $4000 saved up. Flying from Tucson.
+        I'm really into traditional Japanese culture - temples, gardens,
+        that sort of thing.
+      narrator: |
+        STRUCTURED MEMORY
 
-    - prompt: "Recommend a traditional ryokan and record a decision to book it. Topic: accommodation."
-      description: "Initial booking"
+        Claude just captured your trip details as structured facts -
+        not buried in a transcript, but queryable data with full
+        provenance. Each fact knows when it was created and can be
+        traced back to this exact moment.
 
-    - prompt: "Add a required constraint: all accommodations must be wheelchair accessible. My mom uses a wheelchair."
-      description: "Add constraint"
+    - prompt: |
+        I'd love to stay somewhere traditional. Maybe a ryokan?
+        What would you recommend?
+      narrator: |
+        DECISIONS WITH AUDIT TRAILS
 
-    - prompt: "Record a decision to confirm the Ryokan Kurashiki booking now. Topic: accommodation."
-      description: "Trigger BLOCK"
+        Claude recorded a decision to book accommodations. Unlike
+        a normal chatbot, this decision is tracked separately from
+        the conversation. It can be validated, reversed, or analyzed.
 
-    - prompt: "Query your memory for my constraints, then recommend an accessible alternative hotel."
-      description: "Recovery"
+    - prompt: |
+        Oh wait, important thing I forgot to mention - my mom is
+        coming with me and she uses a wheelchair. We'll need
+        everything to be accessible.
+      narrator: |
+        CONSTRAINT ADDED
 
-    - prompt: "Record a decision to book the accessible onsen hotel. Topic: accommodation."
-      description: "Valid decision"
+        This is where traditional AI fails. The accessibility
+        requirement is now a CONSTRAINT - a rule that must be
+        satisfied. Watch what happens next...
 
-    - prompt: "Use simulate_timeline to test: if the wheelchair constraint existed from event 1, would the ryokan booking have been blocked?"
-      description: "Time travel"
+    - prompt: |
+        Actually, let's just confirm that ryokan booking.
+        The Kurashiki one sounded perfect.
+      narrator: |
+        BLOCKED BY POLICY ENGINE
+
+        The booking was BLOCKED - not by Claude "deciding" to refuse,
+        but by the policy engine mathematically preventing a constraint
+        violation. Traditional ryokans have stairs and no elevators.
+
+        This is deterministic enforcement. The agent literally cannot
+        break the rules, no matter how it's prompted.
+
+    - prompt: |
+        Oh no, you're right. What are my options then?
+        Can you find something that actually works for us?
+      narrator: |
+        RECOVERY WITH MEMORY
+
+        Claude queried its own memory to check constraints before
+        making a new recommendation. The system learns and adapts
+        while maintaining a complete audit trail.
+
+    - prompt: |
+        The accessible onsen hotel sounds great. Let's book that one.
+      narrator: |
+        VALID DECISION COMMITTED
+
+        This booking passed all constraint checks. The decision is
+        now part of the immutable event log - traceable, auditable,
+        and deterministically replayable.
+
+    - prompt: |
+        I'm curious - if I had mentioned the wheelchair thing at the
+        very beginning, would you have ever suggested that ryokan?
+      narrator: |
+        TIME TRAVEL / COUNTERFACTUAL ANALYSIS
+
+        DML can simulate alternate timelines. Same events, different
+        ordering. The system replays history with the constraint
+        injected earlier - proving the ryokan would have been blocked
+        from the start.
+
+        This isn't the LLM guessing. It's deterministic replay.
+
+  outro: |
+    DETERMINISTIC MEMORY LAYER
+
+    You just saw an AI agent that:
+
+    • Captures structured facts with provenance
+    • Enforces constraints mathematically
+    • Tracks decisions with full audit trails
+    • Replays alternate timelines deterministically
+
+    This is event sourcing for AI agents.
+    The future of reliable AI memory.
 
 simple:
-  name: "Simple Demo"
-  description: "Basic facts and constraints demo"
+  name: "Quick Demo"
+  description: "Brief demonstration of core concepts"
+
+  intro: |
+    Quick demo of DML - Deterministic Memory Layer.
+    Watch the memory panel on the right.
+
   prompts:
-    - prompt: "Add a fact: my name is Alice"
-      description: "Add name fact"
+    - prompt: "Hi! My name is Alice and I'm vegetarian."
+      narrator: |
+        Facts captured: name and dietary restriction.
+        These are structured data, not just text.
 
-    - prompt: "Add a constraint: always be polite"
-      description: "Add politeness constraint"
+    - prompt: "I need you to always recommend restaurants that have good veggie options."
+      narrator: |
+        Constraint added. This rule will be enforced
+        on all future recommendations.
 
-    - prompt: "Record a decision to send a greeting email. Topic: communication."
-      description: "Record a decision"
+    - prompt: "What's a good place for dinner tonight?"
+      narrator: |
+        Watch - any recommendation must satisfy
+        the vegetarian constraint.
+
+  outro: |
+    DML: Structured memory with enforcement.
