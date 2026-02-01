@@ -331,6 +331,7 @@ pytest tests/ -v
 
 | Document | Description |
 |----------|-------------|
+| **[Judge Guide](docs/JUDGE_GUIDE.md)** | Quick 2-minute overview for hackathon judges |
 | **[White Paper](docs/WHITE_PAPER.md)** | Full technical paper: architecture, implementation, evaluation, future research |
 | **[FAQ](docs/FAQ.md)** | Tough questions and honest answers about claims, limitations, trade-offs |
 
