@@ -33,7 +33,7 @@ japan_trip:
       narrator: |
         STRUCTURED MEMORY
 
-        Claude captured your trip details as structured facts -
+        Claude captured the user's trip details as structured facts -
         not buried in a transcript, but queryable data with full
         provenance. Each fact knows when it was created and can
         be traced back to this exact moment.
@@ -115,7 +115,7 @@ japan_trip:
   outro: |
     DETERMINISTIC MEMORY LAYER
 
-    You just saw an AI agent that:
+    This demo showed an AI agent that:
 
     • Captures structured facts with provenance
     • Enforces constraints mathematically
@@ -264,7 +264,7 @@ clinical:
   outro: |
     DETERMINISTIC MEMORY LAYER - CLINICAL APPLICATIONS
 
-    You just saw constraint enforcement that could save lives:
+    This demo showed constraint enforcement that could save lives:
 
     • Drug allergies enforced mathematically, not by memory
     • Prescriptions blocked BEFORE they can cause harm
@@ -272,6 +272,6 @@ clinical:
     • Deterministic replay for legal and regulatory review
 
     When the stakes are life and death,
-    you need more than a chatbot's best guess.
+    AI needs more than a chatbot's best guess.
 
     DML: Structured memory with mathematical guarantees.

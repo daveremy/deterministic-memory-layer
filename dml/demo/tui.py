@@ -16,13 +16,18 @@ from dml.events import EventStore
 from dml.replay import ReplayEngine
 
 
-def load_demo_prompts(name: str = "japan_trip") -> dict:
-    """Load a demo script from YAML file."""
+def load_all_scripts() -> dict:
+    """Load all demo scripts from YAML file."""
     prompts_file = Path(__file__).parent / "prompts.yaml"
     if not prompts_file.exists():
         raise FileNotFoundError(f"Demo prompts file not found: {prompts_file}")
     with open(prompts_file) as f:
-        data = yaml.safe_load(f)
+        return yaml.safe_load(f)
+
+
+def load_demo_prompts(name: str) -> dict:
+    """Load a specific demo script from YAML file."""
+    data = load_all_scripts()
     if name not in data:
         available = list(data.keys())
         raise KeyError(f"Demo script '{name}' not found. Available: {available}")
@@ -73,16 +78,12 @@ CSS = """
 
 .user-prompt {
     color: $success;
+    margin-top: 1;
     margin-bottom: 1;
 }
 
 .claude-response {
-    margin-bottom: 1;
-}
-
-.turn-divider {
-    color: $text-muted;
-    margin: 1 0;
+    margin-bottom: 2;
 }
 
 #facts-panel {
@@ -212,6 +213,9 @@ class DemoApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("space", "next_step", "Next"),
+        ("1", "select_script(1)", "Script 1"),
+        ("2", "select_script(2)", "Script 2"),
+        ("3", "select_script(3)", "Script 3"),
     ]
 
     # Reactive state
@@ -222,17 +226,19 @@ class DemoApp(App):
 
     def __init__(
         self,
-        script_name: str = "japan_trip",
+        script_name: str | None = None,
         auto_advance: bool = False,
         db_path: str | None = None,
     ):
         super().__init__()
-        self.script_name = script_name
+        self.script_name = script_name  # None means show selection
         self.auto_advance = auto_advance
         self.db_path = db_path or str(Path.home() / ".dml" / "memory.db")
         self.script = None
         self.prompts = []
         self.demo_started = False
+        self.script_selected = script_name is not None
+        self.available_scripts = []
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -285,16 +291,63 @@ class DemoApp(App):
 
     def on_mount(self) -> None:
         """Called when app is mounted."""
-        # Load script
+        # Load available scripts
         try:
-            self.script = load_demo_prompts(self.script_name)
+            all_scripts = load_all_scripts()
+            self.available_scripts = list(all_scripts.keys())
+        except Exception as e:
+            self.notify(f"Error loading scripts: {e}", severity="error")
+            return
+
+        # If no script specified, show selection screen
+        if self.script_name is None:
+            self._show_script_selection()
+        else:
+            self._load_script(self.script_name)
+
+        # Start DML state refresh
+        self.set_interval(0.5, self.refresh_dml_state)
+
+    def _show_script_selection(self) -> None:
+        """Show script selection on intro overlay."""
+        all_scripts = load_all_scripts()
+        intro_title = self.query_one("#intro-title", Static)
+        intro_content = self.query_one("#intro-content", Static)
+        intro_prompt = self.query_one("#intro-prompt", Static)
+
+        intro_title.update("[bold]Deterministic Memory Layer[/]\n[dim]Live Demo[/]")
+
+        # Build script list
+        lines = [
+            "This is a LIVE demo - real Claude, real responses.",
+            "Claude is connected to the DML MCP server.",
+            "The prompts are scripted, but Claude's responses are not.\n",
+            "[bold]Select a demo:[/]\n",
+        ]
+        for i, (key, script) in enumerate(all_scripts.items(), 1):
+            name = script.get("name", key)
+            desc = script.get("description", "")
+            lines.append(f"  [bold cyan]{i}[/]  {name}")
+            if desc:
+                lines.append(f"      [dim]{desc}[/]")
+            lines.append("")
+
+        intro_content.update("\n".join(lines))
+        intro_prompt.update(">>> Press 1, 2, or 3 to select <<<")
+
+    def _load_script(self, script_name: str) -> None:
+        """Load a specific script and populate overlays."""
+        try:
+            self.script = load_demo_prompts(script_name)
             self.prompts = self.script.get("prompts", [])
-            script_name = self.script.get("name", self.script_name)
+            self.script_name = script_name
+            self.script_selected = True
+            display_name = self.script.get("name", script_name)
         except Exception as e:
             self.notify(f"Error loading script: {e}", severity="error")
             return
 
-        # Reset DML database immediately on startup
+        # Reset DML database
         subprocess.run(
             ["uv", "run", "dml", "reset", "--force"],
             capture_output=True
@@ -303,20 +356,33 @@ class DemoApp(App):
         # Populate intro overlay
         intro_title = self.query_one("#intro-title", Static)
         intro_content = self.query_one("#intro-content", Static)
-        intro_title.update(f"[bold]{script_name}[/]")
+        intro_prompt = self.query_one("#intro-prompt", Static)
+
+        intro_title.update(f"[bold]{display_name}[/]")
         intro = self.script.get("intro", "").strip()
         if intro:
             intro_content.update(intro)
         else:
             intro_content.update(f"{len(self.prompts)} prompts in this demo.")
+        intro_prompt.update(">>> Press SPACE to start <<<")
 
         # Populate outro overlay
         outro_content = self.query_one("#outro-content", Static)
         outro = self.script.get("outro", "Demo complete!").strip()
         outro_content.update(outro)
 
-        # Start DML state refresh
-        self.set_interval(0.5, self.refresh_dml_state)
+    def action_select_script(self, number: int) -> None:
+        """Handle script selection by number key."""
+        if self.script_selected or self.demo_started:
+            return  # Already selected or running
+
+        if not self.available_scripts:
+            return
+
+        # Map number to script (1-indexed)
+        if 1 <= number <= len(self.available_scripts):
+            script_name = self.available_scripts[number - 1]
+            self._load_script(script_name)
 
     def action_quit(self) -> None:
         """Quit the app."""
@@ -327,8 +393,11 @@ class DemoApp(App):
         if self.is_running:
             return  # Already running a prompt
 
+        if not self.script_selected:
+            return  # Need to select a script first (press 1, 2, or 3)
+
         if not self.demo_started:
-            # First press - hide intro and start
+            # First press after script selected - hide intro and start
             self.demo_started = True
             intro_overlay = self.query_one("#intro-overlay")
             intro_overlay.add_class("hidden")
@@ -374,10 +443,6 @@ class DemoApp(App):
         loading_status.update(f"Sending prompt {self.current_prompt_index + 1}/{len(self.prompts)}...")
         narrator.update(f"[dim]Sending message to Claude...[/]")
         status_bar.update(f"[{self.current_prompt_index + 1}/{len(self.prompts)}] Waiting for Claude...")
-
-        # Add turn divider if not first turn
-        if self.current_prompt_index > 0:
-            await chat_scroll.mount(Static(f"─── Turn {self.current_prompt_index + 1} ───", classes="turn-divider"))
 
         # Add user message to chat with > prefix
         user_lines = prompt.split('\n')
@@ -463,70 +528,88 @@ class DemoApp(App):
         except Exception:
             return
 
-        # Update Facts
+        # Update Facts - show key: value with wrapping
         facts_content = self.query_one("#facts-content", Static)
         if state.facts:
             lines = []
-            for key, fact in list(state.facts.items())[:10]:
-                lines.append(f"[cyan bold]{key}:[/] {fact.value}")
+            for key, fact in list(state.facts.items())[:8]:
+                lines.append(f"[bold cyan]{key}[/]")
+                lines.append(f"  {fact.value}")
             facts_content.update("\n".join(lines))
         else:
-            facts_content.update("(waiting...)")
+            facts_content.update("[dim]No facts recorded yet[/]")
 
-        # Update Constraints
+        # Update Constraints - show priority indicator and full text
         constraints_content = self.query_one("#constraints-content", Static)
         active = [c for c in state.constraints.values() if c.active]
         if active:
             lines = []
-            for c in active[:6]:
+            for c in active[:5]:
                 if c.priority == "required":
-                    lines.append(f"[red bold]![/] {c.text[:50]}")
+                    lines.append(f"[red bold]● REQUIRED[/]")
+                    lines.append(f"  {c.text}")
                 else:
-                    lines.append(f"[green]o[/] {c.text[:50]}")
+                    lines.append(f"[yellow]○ preferred[/]")
+                    lines.append(f"  {c.text}")
             constraints_content.update("\n".join(lines))
         else:
-            constraints_content.update("(none)")
+            constraints_content.update("[dim]No constraints active[/]")
 
-        # Update Decisions
+        # Update Decisions - show status and text, newest first
         decisions_content = self.query_one("#decisions-content", Static)
         if state.decisions:
             lines = []
-            for d in state.decisions[-6:]:
+            # Show newest decisions first
+            for d in reversed(state.decisions[-5:]):
                 if d.status == "blocked":
-                    lines.append(f"[red bold]X[/] [red]{d.text[:40]}[/]")
+                    lines.append(f"[red bold]✗ BLOCKED[/]")
+                    lines.append(f"  [red]{d.text}[/]")
                 else:
-                    lines.append(f"[green]+[/] {d.text[:40]}")
+                    lines.append(f"[green bold]✓ Committed[/]")
+                    lines.append(f"  {d.text}")
             decisions_content.update("\n".join(lines))
         else:
-            decisions_content.update("(none)")
+            decisions_content.update("[dim]No decisions recorded[/]")
 
-        # Update Events
+        # Update Events - show newest first with descriptive text
         events_content = self.query_one("#events-content", Static)
         if events:
             lines = []
-            for e in events[-8:]:
+            # Show newest events first
+            for e in reversed(events[-6:]):
                 seq = e.global_seq
                 etype = e.type.value
                 if "Decision" in etype:
                     status = e.payload.get("status", "")
+                    text = e.payload.get("text", "")[:30]
                     if status == "blocked":
-                        lines.append(f"[dim]{seq:2}[/] [red bold]BLOCKED[/]")
+                        lines.append(f"[dim]#{seq}[/] [red bold]Decision BLOCKED[/]")
+                        lines.append(f"     [dim]{text}...[/]")
                     else:
-                        lines.append(f"[dim]{seq:2}[/] [green]Decision+[/]")
+                        lines.append(f"[dim]#{seq}[/] [green]Decision committed[/]")
+                        lines.append(f"     [dim]{text}...[/]")
                 elif "Constraint" in etype:
                     priority = e.payload.get("priority", "")
+                    text = e.payload.get("text", "")[:30]
                     if priority == "required":
-                        lines.append(f"[dim]{seq:2}[/] [red]Constraint![/]")
+                        lines.append(f"[dim]#{seq}[/] [red]Constraint added (required)[/]")
                     else:
-                        lines.append(f"[dim]{seq:2}[/] [yellow]Constraint+[/]")
+                        lines.append(f"[dim]#{seq}[/] [yellow]Constraint added[/]")
+                    lines.append(f"     [dim]{text}...[/]")
                 elif "Fact" in etype:
-                    key = e.payload.get("key", "?")[:12]
-                    lines.append(f"[dim]{seq:2}[/] [cyan]Fact+ {key}[/]")
+                    key = e.payload.get("key", "?")
+                    value = str(e.payload.get("value", ""))[:20]
+                    lines.append(f"[dim]#{seq}[/] [cyan]Fact recorded[/]")
+                    lines.append(f"     [dim]{key} = {value}[/]")
+                elif "Query" in etype:
+                    lines.append(f"[dim]#{seq}[/] [blue]Memory queried[/]")
+                elif "Simulate" in etype:
+                    lines.append(f"[dim]#{seq}[/] [magenta]Timeline simulated[/]")
                 else:
-                    lines.append(f"[dim]{seq:2} {etype[:15]}[/]")
+                    lines.append(f"[dim]#{seq} {etype}[/]")
             events_content.update("\n".join(lines))
         else:
-            events_content.update("(waiting...)")
+            events_content.update("[dim]No events yet[/]")
 
 
 def main(script_name: str = "japan_trip", auto: bool = False, db_path: str | None = None):

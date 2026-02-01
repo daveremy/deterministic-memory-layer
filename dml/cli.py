@@ -867,10 +867,10 @@ def chat_demo() -> None:
 
 
 @cli.command("live")
-@click.option("--script", default="japan_trip", help="Demo script name from prompts.yaml")
+@click.option("--script", default=None, help="Demo script name from prompts.yaml (omit to choose interactively)")
 @click.option("--auto", is_flag=True, help="Auto-advance without waiting for SPACE")
 @click.pass_context
-def live_tui(ctx: click.Context, script: str, auto: bool) -> None:
+def live_tui(ctx: click.Context, script: str | None, auto: bool) -> None:
     """Run scripted demo with real Claude and live monitor."""
     from dml.demo.tui import DemoApp
     db_path = ctx.obj.get("db_path") if ctx.obj else None
