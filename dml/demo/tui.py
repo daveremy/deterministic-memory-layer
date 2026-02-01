@@ -26,6 +26,7 @@ def load_all_scripts() -> dict:
         return yaml.safe_load(f)
 
 
+
 def load_demo_prompts(name: str) -> dict:
     """Load a specific demo script from YAML file."""
     data = load_all_scripts()
@@ -213,6 +214,7 @@ class DemoApp(App):
         ("1", "select_script(1)", "Script 1"),
         ("2", "select_script(2)", "Script 2"),
         ("3", "select_script(3)", "Script 3"),
+        ("4", "select_script(4)", "Script 4"),
     ]
 
     # Reactive state
@@ -226,17 +228,28 @@ class DemoApp(App):
         script_name: str | None = None,
         auto_advance: bool = False,
         db_path: str | None = None,
+        debug: bool = False,
     ):
         super().__init__()
         self.script_name = script_name  # None means show selection
         self.auto_advance = auto_advance
         self.db_path = db_path or str(Path.home() / ".dml" / "memory.db")
+        self.debug_mode = debug
+        self.debug_log = Path.home() / ".dml" / "demo-debug.log" if debug else None
         self.script = None
         self.prompts = []
         self.demo_started = False
+        self.demo_complete = False
         self.script_selected = script_name is not None
         self.available_scripts = []
-        self.session_id = str(uuid.uuid4())  # Unique session for this demo run
+        # Create unique temp directory for this demo session (enables -c to work)
+        import tempfile
+        self.session_id = str(uuid.uuid4())
+        self.demo_dir = Path(tempfile.gettempdir()) / "dml-demo" / self.session_id
+        self.demo_dir.mkdir(parents=True, exist_ok=True)
+        if self.debug_log:
+            self.debug_log.write_text(f"=== Demo session {self.session_id} ===\n")
+            self.debug_log.open("a").write(f"Demo dir: {self.demo_dir}\n")
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -340,7 +353,11 @@ class DemoApp(App):
             lines.append("")
 
         intro_content.update("\n".join(lines))
-        intro_prompt.update(">>> Press 1, 2, or 3 to select, Q to quit <<<")
+        num_scripts = len(all_scripts)
+        if num_scripts <= 3:
+            intro_prompt.update(">>> Press 1, 2, or 3 to select, Q to quit <<<")
+        else:
+            intro_prompt.update(f">>> Press 1-{num_scripts} to select, Q to quit <<<")
 
     def _load_script(self, script_name: str) -> None:
         """Load a specific script and populate overlays."""
@@ -355,10 +372,16 @@ class DemoApp(App):
             return
 
         # Reset DML database
-        subprocess.run(
+        result = subprocess.run(
             ["uv", "run", "dml", "reset", "--force"],
-            capture_output=True
+            capture_output=True,
+            text=True
         )
+        if result.returncode != 0:
+            self.notify(f"Reset failed: {result.stderr}", severity="error")
+
+        # Refresh state display to show empty state
+        self.refresh_dml_state()
 
         # Populate intro overlay
         intro_title = self.query_one("#intro-title", Static)
@@ -376,7 +399,7 @@ class DemoApp(App):
         # Populate outro overlay
         outro_content = self.query_one("#outro-content", Static)
         outro = self.script.get("outro", "Demo complete!").strip()
-        outro_content.update(outro)
+        outro_content.update(outro + "\n\n[bold green]>>> Press SPACE to return to menu, Q to quit <<<[/]")
 
     def action_select_script(self, number: int) -> None:
         """Handle script selection by number key."""
@@ -392,13 +415,28 @@ class DemoApp(App):
             self._load_script(script_name)
 
     def action_quit(self) -> None:
-        """Quit the app."""
+        """Quit the app and clean up temp directory."""
+        self._cleanup_demo_dir()
         self.exit()
+
+    def _cleanup_demo_dir(self) -> None:
+        """Remove the temp demo directory."""
+        import shutil
+        if self.demo_dir and self.demo_dir.exists():
+            try:
+                shutil.rmtree(self.demo_dir)
+            except Exception:
+                pass  # Best effort cleanup
 
     def action_next_step(self) -> None:
         """Advance to next step."""
         if self.is_running:
             return  # Already running a prompt
+
+        if self.demo_complete:
+            # Return to menu
+            self._return_to_menu()
+            return
 
         if not self.script_selected:
             return  # Need to select a script first (press 1, 2, or 3)
@@ -414,18 +452,57 @@ class DemoApp(App):
             self.run_next_prompt()
         else:
             # Show outro overlay
+            self.demo_complete = True
             outro_overlay = self.query_one("#outro-overlay")
             outro_overlay.add_class("visible")
 
+    def _return_to_menu(self) -> None:
+        """Return to demo selection menu."""
+        # Clean up current demo
+        self._cleanup_demo_dir()
+
+        # Reset state
+        self.demo_started = False
+        self.demo_complete = False
+        self.script_selected = False
+        self.current_prompt_index = 0
+        self.script = None
+        self.prompts = []
+
+        # Create new demo directory for next run
+        import tempfile
+        self.session_id = str(uuid.uuid4())
+        self.demo_dir = Path(tempfile.gettempdir()) / "dml-demo" / self.session_id
+        self.demo_dir.mkdir(parents=True, exist_ok=True)
+
+        # Hide outro, show intro with menu
+        outro_overlay = self.query_one("#outro-overlay")
+        outro_overlay.remove_class("visible")
+
+        intro_overlay = self.query_one("#intro-overlay")
+        intro_overlay.remove_class("hidden")
+
+        # Clear chat
+        chat_scroll = self.query_one("#chat-scroll", VerticalScroll)
+        chat_scroll.remove_children()
+
+        # Show selection menu
+        self._show_script_selection()
+
     def reset_demo(self) -> None:
         """Reset DML database for fresh demo."""
-        subprocess.run(
+        result = subprocess.run(
             ["uv", "run", "dml", "reset", "--force"],
-            capture_output=True
+            capture_output=True,
+            text=True
         )
+        if result.returncode != 0:
+            self.notify(f"Reset failed: {result.stderr}", severity="error")
         # Clear chat
         chat_scroll = self.query_one("#chat-scroll")
         chat_scroll.remove_children()
+        # Refresh state display to show empty state
+        self.refresh_dml_state()
 
     @work(exclusive=True)
     async def run_next_prompt(self) -> None:
@@ -561,7 +638,8 @@ class DemoApp(App):
             return None
 
         if expects == "facts":
-            if after["num_facts"] <= before["num_facts"]:
+            # Check if any new events were recorded (covers both new facts and updates)
+            if after["last_seq"] <= before["last_seq"]:
                 return "Expected new facts to be recorded, but none were added."
 
         elif expects == "decision":
@@ -582,28 +660,41 @@ class DemoApp(App):
 
     async def run_claude(self, prompt: str, continue_session: bool = False) -> str:
         """Run claude -p command asynchronously in a temp directory."""
+        # Prepend /dml to invoke the DML skill
+        # Normalize whitespace (prompts from YAML may have internal newlines)
+        clean_prompt = " ".join(prompt.split())
+        dml_prompt = f"/dml {clean_prompt}"
         cmd = [
-            "claude", "-p", prompt.strip(),
-            "--allowedTools", "mcp__dml__*",
-            "--session-id", self.session_id,  # Isolate demo from other Claude sessions
+            "claude", "-p", dml_prompt,
+            "--dangerously-skip-permissions",  # Allow tool use without prompts
         ]
         if continue_session:
-            cmd.append("-c")
+            cmd.append("-c")  # Continue most recent conversation in demo_dir
 
-        # Run in temp directory to prevent Claude from modifying repo files
-        import tempfile
-        demo_dir = Path(tempfile.gettempdir()) / "dml-demo"
-        demo_dir.mkdir(exist_ok=True)
+        # Debug logging
+        if self.debug_log:
+            import shlex
+            with open(self.debug_log, "a") as f:
+                f.write(f"\n--- Command (cwd: {self.demo_dir}) ---\n{shlex.join(cmd)}\n")
 
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=str(demo_dir),
+                cwd=str(self.demo_dir),
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-            return stdout.decode().strip()
+            response = stdout.decode().strip()
+
+            # Debug logging
+            if self.debug_log:
+                with open(self.debug_log, "a") as f:
+                    f.write(f"\n--- Response ---\n{response}\n")
+                    if stderr:
+                        f.write(f"\n--- Stderr ---\n{stderr.decode()}\n")
+
+            return response
         except asyncio.TimeoutError:
             return "[Timeout - Claude took too long to respond]"
         except FileNotFoundError:
@@ -670,47 +761,52 @@ class DemoApp(App):
         events_content = self.query_one("#events-content", Static)
         if events:
             lines = []
-            # Show newest events first
-            for e in reversed(events[-6:]):
+            # Show all events, newest first (scrollable)
+            for e in reversed(events):
                 seq = e.global_seq
                 etype = e.type.value
+                # Format: #seq T:turn or just #seq if no turn
+                turn_info = f" [magenta]T{e.turn_id}[/]" if e.turn_id is not None else ""
+                seq_prefix = f"[dim]#{seq}[/]{turn_info}"
                 if "Decision" in etype:
                     status = e.payload.get("status", "")
                     text = e.payload.get("text", "")[:30]
                     if status == "blocked":
-                        lines.append(f"[dim]#{seq}[/] [red bold]Decision BLOCKED[/]")
+                        lines.append(f"{seq_prefix} [red bold]Decision BLOCKED[/]")
                         lines.append(f"     [dim]{text}...[/]")
                     else:
-                        lines.append(f"[dim]#{seq}[/] [green]Decision committed[/]")
+                        lines.append(f"{seq_prefix} [green]Decision committed[/]")
                         lines.append(f"     [dim]{text}...[/]")
                 elif "Constraint" in etype:
                     priority = e.payload.get("priority", "")
                     text = e.payload.get("text", "")[:30]
                     if priority == "required":
-                        lines.append(f"[dim]#{seq}[/] [red]Constraint added (required)[/]")
+                        lines.append(f"{seq_prefix} [red]Constraint added (required)[/]")
                     else:
-                        lines.append(f"[dim]#{seq}[/] [yellow]Constraint added[/]")
+                        lines.append(f"{seq_prefix} [yellow]Constraint added[/]")
                     lines.append(f"     [dim]{text}...[/]")
                 elif "Fact" in etype:
                     key = e.payload.get("key", "?")
                     value = str(e.payload.get("value", ""))[:20]
-                    lines.append(f"[dim]#{seq}[/] [cyan]Fact recorded[/]")
+                    lines.append(f"{seq_prefix} [cyan]Fact recorded[/]")
                     lines.append(f"     [dim]{key} = {value}[/]")
                 elif "Query" in etype:
-                    lines.append(f"[dim]#{seq}[/] [blue]Memory queried[/]")
+                    lines.append(f"{seq_prefix} [blue]Memory queried[/]")
                 elif "Simulate" in etype:
-                    lines.append(f"[dim]#{seq}[/] [magenta]Timeline simulated[/]")
+                    lines.append(f"{seq_prefix} [magenta]Timeline simulated[/]")
                 else:
-                    lines.append(f"[dim]#{seq} {etype}[/]")
+                    lines.append(f"[dim]#{seq}{turn_info} {etype}[/]")
             events_content.update("\n".join(lines))
         else:
             events_content.update("[dim]No events yet[/]")
 
 
-def main(script_name: str = "japan_trip", auto: bool = False, db_path: str | None = None):
+def main(script_name: str | None = None, auto: bool = False, db_path: str | None = None, debug: bool = False):
     """Run the demo TUI."""
-    app = DemoApp(script_name=script_name, auto_advance=auto, db_path=db_path)
+    app = DemoApp(script_name=script_name, auto_advance=auto, db_path=db_path, debug=debug)
     app.run()
+    if debug:
+        print(f"\nDebug log written to: ~/.dml/demo-debug.log")
 
 
 if __name__ == "__main__":

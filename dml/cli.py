@@ -2,7 +2,7 @@
 
 import json
 import os
-import sys
+import time
 from pathlib import Path
 
 import click
@@ -49,21 +49,49 @@ def init(ctx: click.Context) -> None:
 
 @cli.command()
 @click.option("--force", "-f", is_flag=True, help="Skip confirmation prompt")
+@click.option("-y", is_flag=True, help="Same as --force")
 @click.pass_context
-def reset(ctx: click.Context, force: bool) -> None:
+def reset(ctx: click.Context, force: bool, y: bool) -> None:
     """Clear all memory (reset database for fresh demo)."""
-    db_path = ctx.obj["db_path"]
+    import sqlite3
 
-    if not Path(db_path).exists():
-        click.echo("No memory store to reset.")
+    db_path = Path(ctx.obj["db_path"])
+
+    if not db_path.exists():
+        # Create fresh database
+        store = EventStore(str(db_path))
+        store.close()
+        click.echo(f"Created fresh memory store at {db_path}")
         return
 
-    if not force:
+    if not (force or y):
         click.confirm(f"This will delete all events in {db_path}. Continue?", abort=True)
 
-    # Delete and recreate
-    Path(db_path).unlink()
-    store = EventStore(db_path)
+    # First, checkpoint WAL to flush any pending writes and close connections
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.close()
+    except sqlite3.Error as e:
+        click.echo(f"Warning: WAL checkpoint failed: {e}", err=True)
+
+    # Small delay for any lingering connections to release
+    time.sleep(0.1)
+
+    # Delete main db and any WAL/journal files
+    for suffix in ["", "-wal", "-shm", "-journal"]:
+        p = Path(str(db_path) + suffix)
+        if p.exists():
+            try:
+                p.unlink()
+            except OSError as e:
+                click.echo(f"Warning: Could not delete {p}: {e}", err=True)
+
+    # Small delay to ensure filesystem catches up
+    time.sleep(0.1)
+
+    # Create fresh database
+    store = EventStore(str(db_path))
     store.close()
     click.echo(f"Memory reset. Fresh database at {db_path}")
 
@@ -624,7 +652,7 @@ def demo(ctx: click.Context) -> None:
     from rich.console import Console
     from rich.panel import Panel
     from rich.text import Text
-    from rich.box import DOUBLE, ROUNDED
+    from rich.box import DOUBLE
     from rich.align import Align
     from dml.visualization import DMLVisualization, DecisionEntry
 
@@ -881,13 +909,28 @@ def chat_demo() -> None:
 @cli.command("live")
 @click.option("--script", default=None, help="Demo script name from prompts.yaml (omit to choose interactively)")
 @click.option("--auto", is_flag=True, help="Auto-advance without waiting for SPACE")
+@click.option("--debug", is_flag=True, help="Log commands and responses to ~/.dml/demo-debug.log")
 @click.pass_context
-def live_tui(ctx: click.Context, script: str | None, auto: bool) -> None:
+def live_tui(ctx: click.Context, script: str | None, auto: bool, debug: bool) -> None:
     """Run scripted demo with real Claude and live monitor."""
     from dml.demo.tui import DemoApp
     db_path = ctx.obj.get("db_path") if ctx.obj else None
-    app = DemoApp(script_name=script, auto_advance=auto, db_path=db_path)
+    app = DemoApp(script_name=script, auto_advance=auto, db_path=db_path, debug=debug)
     app.run()
+    if debug:
+        click.echo(f"\nDebug log: ~/.dml/demo-debug.log")
+
+
+@cli.command("validate")
+@click.option("--script", required=True, help="Demo script name to validate")
+@click.option("--dry-run", is_flag=True, help="Just show expectations, don't run")
+@click.option("-v", "--verbose", is_flag=True, help="Verbose output")
+def validate_demo(script: str, dry_run: bool, verbose: bool) -> None:
+    """Validate a demo script by running it and checking DML state."""
+    from dml.demo.validator import validate_demo as run_validation
+    success = run_validation(script, dry_run=dry_run, verbose=verbose)
+    if not success:
+        raise SystemExit(1)
 
 
 @cli.command()
@@ -904,7 +947,6 @@ def live_demo() -> None:
     """Launch live demo with Claude Code + DML monitor in tmux."""
     import shutil
     import subprocess
-    import time as time_module
 
     # Check for tmux
     if not shutil.which("tmux"):
@@ -997,7 +1039,6 @@ exec $SHELL
 def auto_demo(delay: int) -> None:
     """Run automated demo script (sends inputs to running tmux session)."""
     import subprocess
-    import time as time_module
 
     session = "dml-demo"
     # Get the pane ID for the left (first) pane
@@ -1029,7 +1070,7 @@ def auto_demo(delay: int) -> None:
         subprocess.run(["tmux", "send-keys", "-t", pane, "-l", text])
         subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"])
         click.echo(f"    (waiting {wait}s for response...)")
-        time_module.sleep(wait)
+        time.sleep(wait)
 
     click.echo("")
     click.echo("=" * 60)
@@ -1042,7 +1083,7 @@ def auto_demo(delay: int) -> None:
     click.confirm("Is Claude ready?", abort=True)
     click.echo("")
     click.echo("Starting in 3 seconds... Switch to tmux window to watch!")
-    time_module.sleep(3)
+    time.sleep(3)
 
     # Act 1: Quick Setup
     click.echo("\n--- ACT 1: SETUP ---")

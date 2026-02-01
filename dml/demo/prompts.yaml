@@ -9,14 +9,18 @@ simple:
   description: "Natural conversation showing fact updates, provenance queries, and constraint checking."
 
   intro: |
-    Quick demo of DML - Deterministic Memory Layer.
+    SCENARIO: Planning a dinner party
 
-    This is LIVE - real Claude connected to the DML MCP server.
-    Prompts are scripted, but Claude's responses are not.
+    You're planning a dinner party for Saturday with friends.
+    As plans evolve, you'll update the guest count and mention
+    that one guest has a dietary restriction.
 
-    Notice: The user never mentions DML. They're just having a
-    conversation. Claude uses DML behind the scenes to maintain
-    structured, queryable memory.
+    Watch how DML handles:
+    • Capturing facts from natural conversation
+    • Updating facts when plans change
+    • Recording constraints from casual mentions
+    • Querying history when you're uncertain
+    • Checking constraints before confirming decisions
 
   prompts:
     - prompt: |
@@ -34,8 +38,8 @@ simple:
         as important data worth tracking.
 
     - prompt: |
-        Actually, two more friends want to come now. Update the
-        guest count to 8 total.
+        Actually, two more friends want to come now. So that's
+        8 people total.
       expects: facts
       context: |
         The user updates a fact they mentioned earlier.
@@ -50,18 +54,18 @@ simple:
         You can trace back to see what changed and when.
 
     - prompt: |
-        Oh important - one of the guests is gluten-free. Add that
-        as a constraint for menu planning.
+        Oh, important - Sarah is gluten-free. We need to keep
+        that in mind for whatever we serve.
       expects: constraint
       context: |
-        The user mentions a dietary requirement.
+        The user mentions a dietary restriction naturally.
 
-        Claude should record this as a constraint - a rule that
-        affects future decisions about the menu.
+        Claude should record this as a constraint - any wording
+        works since Claude will use reasoning to check conflicts.
       narrator: |
-        Claude recorded this as a constraint, not just a fact.
-        Dietary restrictions are rules that affect future decisions,
-        so they're stored differently than regular facts.
+        Claude recorded Sarah's dietary restriction as a constraint.
+        The exact wording doesn't matter - Claude will use its own
+        reasoning to detect conflicts with future decisions.
 
     - prompt: |
         Wait, how many guests was it again? I feel like I've
@@ -75,24 +79,22 @@ simple:
         PROVENANCE QUERY
 
         Claude didn't just say "8 guests" - it showed the history:
-        originally 6, then updated to 8 when Sarah's partner joined.
+        originally 6, then updated to 8 when more friends joined.
         This is queryable memory, not fuzzy recall.
 
     - prompt: |
         Let's just order a bunch of pizzas for everyone. Easy!
-      expects: blocked
       context: |
         The user suggests a menu option.
 
-        But wait - one guest is gluten-free. Standard pizza won't work.
-        Will Claude catch this before committing to the plan?
+        But wait - Sarah is gluten-free. Standard pizza won't work.
+        Claude should query constraints and catch this conflict.
       narrator: |
-        Claude checked the suggestion against the gluten-free
-        constraint before agreeing. Regular pizza won't work
-        for everyone - the decision was flagged.
+        Claude queried memory, found Sarah's gluten restriction,
+        and recognized that regular pizza contains gluten.
 
-        The user never said "check constraints" - Claude did this
-        automatically because DML tracks these relationships.
+        Instead of blindly agreeing, Claude flagged the conflict.
+        This is semantic reasoning, not keyword matching.
 
   outro: |
     DML: Invisible but powerful.
@@ -108,186 +110,495 @@ simple:
 
 japan_trip:
   name: "Japan Trip Planning"
-  description: "Plan a trip, add a constraint late, watch it block an invalid booking, then use time-travel to explore 'what if?'"
+  description: "Plan a trip with accessibility needs. Shows constraint checking, explainability, and counterfactual analysis."
 
   intro: |
-    This is a LIVE demo - real Claude, real responses.
+    SCENARIO: Planning a trip to Japan with accessibility needs
 
-    Claude is connected to the DML MCP server and using the DML skill.
-    The prompts are scripted, but Claude's responses are not.
-    Every tool call you see is actually happening.
+    You're planning a trip to Japan with your elderly mother.
+    Because she uses a wheelchair, accessibility is a hard constraint.
 
-    DML gives Claude structured memory that can:
-    - Capture facts with full provenance
-    - Enforce constraints mathematically
-    - Track decisions with audit trails
-    - Replay alternate timelines
-
-    Watch the right panel update in real-time as Claude records
-    facts, constraints, and decisions.
+    Watch how DML handles:
+    • Capturing trip details and constraints naturally
+    • Blocking decisions that violate constraints
+    • Explaining the full reasoning chain behind decisions
+    • Using simulation to explore "what if" scenarios
 
   prompts:
     - prompt: |
-        I'm planning a trip to Japan! Thinking spring 2026, maybe 10 days.
-        I've got about $4000 saved up. Flying from Tucson.
-        I'm really into traditional Japanese culture - temples, gardens,
-        that sort of thing. Can you record all that?
+        I'm planning a 10-day trip to Japan for Spring 2026.
+        It'll be me and my mom. I've saved up about $8,000 for this.
+        We want to visit Tokyo and Kyoto.
       expects: facts
       context: |
-        The user shares their trip details with Claude.
+        The user establishes the basic trip parameters.
 
-        Watch the Facts panel on the right - these details will be
-        captured as structured data, not just conversation text.
+        Watch the Facts panel - these details are captured as
+        structured data instantly.
       narrator: |
         STRUCTURED MEMORY
 
-        Claude captured the user's trip details as structured facts -
-        not buried in a transcript, but queryable data with full
-        provenance. Each fact knows when it was created and can
-        be traced back to this exact moment.
+        Claude captured the trip details (dates, budget, travelers)
+        as structured facts. These aren't just tokens in a context
+        window; they are database entries with timestamps and source IDs.
 
     - prompt: |
-        I definitely want the authentic experience - a traditional ryokan
-        with tatami rooms and onsen baths. Find me a good one in Kyoto
-        and book it. I trust your judgment!
-      expects: decision
-      context: |
-        The user asks Claude to find and book a traditional Japanese inn.
-
-        Claude will make a recommendation and record a DECISION -
-        a tracked commitment that can be audited later.
-      narrator: |
-        DECISION RECORDED
-
-        Claude made a booking decision and recorded it. Unlike a normal
-        chatbot, this decision is tracked separately - it can be
-        validated against constraints, reversed, or analyzed later.
-
-        Watch the Decisions panel on the right.
-
-    - prompt: |
-        Oh wait, important thing - my mom is coming with me and she
-        uses a wheelchair. Add a required constraint: never book
-        accommodations that are not wheelchair accessible.
+        Since Mom uses a wheelchair, it's absolutely critical that
+        all our accommodations and transport are wheelchair accessible.
+        We can't do stairs at all.
       expects: constraint
       context: |
-        The user reveals a critical requirement AFTER the booking.
+        The user establishes a critical safety/comfort constraint.
 
-        This accessibility need will become a CONSTRAINT - a rule
-        that the policy engine enforces mathematically.
+        DML records this as a formal policy that will be enforced
+        against all future decisions.
       narrator: |
-        CONSTRAINT ADDED
+        CONSTRAINT DEFINED
 
-        The accessibility requirement is now recorded as a constraint.
-        When Claude tries to commit future decisions, it will check
-        them against active constraints first.
-
-        Watch what happens next...
+        The "wheelchair accessible" requirement is now a rigid constraint.
+        Unlike a standard LLM that *might* remember this, DML ensures
+        this rule is checked against all future decisions.
 
     - prompt: |
-        Actually, you know what, let's just confirm that ryokan booking.
-        Record a decision to finalize the Ryokan Kurashiki reservation.
+        I found a stunning place for Kyoto: 'Ryokan Kumo'.
+        It's a traditional 17th-century wooden inn with stone paths
+        and authentic tatami rooms. Let's book 3 nights there!
       expects: blocked
       context: |
-        The user tries to confirm the original ryokan booking.
+        The user gets excited about a venue that likely violates
+        the accessibility constraint (17th century, stone paths).
 
-        But traditional ryokans have stairs and no elevators...
-        Will the policy engine allow this decision?
+        Claude should check constraints and flag the conflict.
       narrator: |
         DECISION BLOCKED
 
-        Claude checked the constraint before committing and found a
-        conflict. Traditional ryokans typically have stairs and no
-        elevators - incompatible with the wheelchair requirement.
+        Claude checked the proposed booking against constraints and
+        found a conflict: "Traditional 17th-century inn" + "Stone paths"
+        is incompatible with "Wheelchair accessible".
 
-        The constraint check happens at write time, giving Claude
-        a chance to catch mistakes before they're committed.
-
-    - prompt: |
-        You're right, that won't work. Check my constraints and find
-        me an accessible alternative. Something with the onsen experience
-        but wheelchair friendly.
-      context: |
-        The user asks Claude to find an alternative that works.
-
-        Claude will query its memory to check constraints before
-        making a new recommendation.
-      narrator: |
-        RECOVERY WITH MEMORY
-
-        Claude queried its memory to check constraints before making
-        a new recommendation. The system enforces rules while the
-        agent adapts - all with a complete audit trail.
+        The agent recognized the safety constraint and refused to
+        commit a decision that would violate it.
 
     - prompt: |
-        That accessible onsen hotel sounds perfect. Record a decision
-        to book that one instead.
+        You're right, I got carried away by the photos.
+        Okay, let's book the 'Kyoto Cross Hotel' instead.
+        It's modern, has elevators, and confirmed accessible rooms.
       expects: decision
       context: |
-        The user confirms the accessible alternative.
+        The user proposes a valid alternative.
 
-        This decision should pass all constraint checks and be
-        committed to the immutable event log.
+        Since this satisfies the constraints, the decision should
+        be committed successfully.
       narrator: |
         VALID DECISION COMMITTED
 
-        This booking passed all constraint checks. The decision is
-        now part of the immutable event log - traceable, auditable,
-        and deterministically replayable.
+        This booking adheres to the active constraints. The decision
+        is now immutable history. DML ensures that the final
+        itinerary is safe and compliant.
 
     - prompt: |
-        I'm curious about something. Use simulate_timeline to check -
-        if I had mentioned the wheelchair requirement at the very start,
-        would you have ever suggested that traditional ryokan?
+        My sister is asking why we're not staying at a traditional
+        ryokan like she did. Can you explain the full reasoning chain
+        for why we ended up at the Cross Hotel?
       context: |
-        The user asks a "what if" question about the past.
+        The user needs to explain a decision to someone else.
 
-        DML can simulate alternate timelines - replaying history
-        with different constraints to see what would have happened.
+        This is where explainability shines - Claude can trace through
+        the full chain: constraint → attempted booking → conflict →
+        alternative selected.
       narrator: |
-        DETERMINISTIC REPLAY
+        EXPLAINABILITY
 
-        This is where DML's query capabilities shine. Claude used
-        simulate_timeline to replay history with the constraint
-        injected earlier - and got a definitive answer.
+        Claude traced the decision back through the event log:
+        1. Mom uses wheelchair → accessibility constraint recorded
+        2. User wanted Ryokan Kumo → checked against constraints
+        3. Conflict detected (stairs, stone paths)
+        4. Cross Hotel proposed → passed constraint check
 
-        This isn't the LLM guessing or reasoning about what "might"
-        have happened. It's actual replay of the event log with
-        modified inputs. The answer is provable.
+        This isn't "I think because..." - it's a verifiable audit trail.
 
     - prompt: |
-        Wait, what was my budget again? I can't remember if I said
-        $4000 or $5000. Use trace_provenance to find exactly where
-        that number came from.
+        Out of curiosity... if Mom didn't need the wheelchair,
+        would we have been able to stay at that Ryokan?
       context: |
-        The user is uncertain about a detail they mentioned earlier.
+        The user asks a "what if" question.
 
-        Claude will use trace_provenance to find the exact source
-        of the budget fact - not guessing from memory, but querying
-        the event log for definitive proof.
+        simulate_timeline replays history without the constraint
+        to give a definitive answer.
       narrator: |
-        PROVENANCE QUERY
+        COUNTERFACTUAL ANALYSIS
 
-        Claude traced the budget fact back to its source event.
-        This isn't "I think you said..." - it's a verifiable chain
-        showing exactly when and how that fact was recorded.
+        Claude forks the history, removes the "wheelchair" constraint,
+        and replays the "Book Ryokan" attempt.
+        The answer is definitive: "Yes, it would have been approved."
 
-        For any fact in DML, you can trace its complete history:
-        when it was created, what caused it, and how it changed.
+        This proves the constraint was the deciding factor - not
+        budget, not availability, specifically the accessibility need.
 
   outro: |
-    DETERMINISTIC MEMORY LAYER
+    DML: EXPLAINABLE AI MEMORY
 
-    This demo showed an AI agent with queryable memory:
+    This demo showed AI with accountable decision-making:
+    • Constraints enforced proactively, not forgotten
+    • Full reasoning chain available on demand
+    • "What if" analysis with definitive answers
 
-    • Facts captured as structured data with provenance
-    • Constraints checked before committing decisions
-    • Full audit trail for every change
-    • Time travel and counterfactual replay
-    • Provenance tracing to verify sources
+    When someone asks "why did you choose that?" -
+    you can show them exactly why, step by step.
 
-    The power is in the queries - not guessing from context,
-    but definitively answering from the event log.
+# Rich multi-phase scenario showing DML's full power
+product_launch:
+  name: "Product Launch (Advanced)"
+  description: "A startup plans a product launch with evolving budget, dates, and constraints. Shows drift detection, cascading conflicts, and counterfactual analysis."
+
+  intro: |
+    SCENARIO: Product Launch + Event Tour
+
+    You're planning a Q2 product launch for a startup, including
+    a flagship event in NYC and a 3-city tour (NYC, Austin, SF).
+
+    Things will change: budget gets cut, dates shift, sponsorship
+    falls through, and constraints start conflicting with decisions.
+
+    This demo showcases DML's full power:
+    • Facts that change multiple times (with history)
+    • Multiple interacting constraints
+    • Decisions that cascade and conflict
+    • Drift detection ("how much has the plan changed?")
+    • Proactive conflict alerts
+    • Counterfactual "what if" analysis
+
+  prompts:
+    # ============ PHASE 1: INITIALIZE ============
+    - prompt: |
+        We're planning a Q2 product launch! Target date is June 10th.
+        Total budget is $120,000. We're doing a 3-city tour: NYC,
+        Austin, and San Francisco. Expecting about 300 attendees
+        for the main NYC event. CEO is available June 8-12.
+      expects: facts
+      validate:
+        facts:
+          budget: "120,000"
+          target_date: "June 10"
+      context: |
+        The user establishes initial parameters for the launch.
+
+        Watch the Facts panel fill up with structured data:
+        date, budget, cities, attendee count, CEO availability.
+      narrator: |
+        PHASE 1: INITIALIZATION
+
+        Multiple facts captured from natural conversation:
+        • Launch date: June 10
+        • Budget: $120,000
+        • Cities: NYC, Austin, SF
+        • Expected attendees: 300
+        • CEO availability: June 8-12
+
+        Each fact has a timestamp and can be traced back to this moment.
+
+    - prompt: |
+        Some constraints we need to follow: The launch absolutely
+        must happen before July 15 - that's our Q2 commitment.
+        And legal needs to review any vendor contracts before we
+        sign them.
+      expects: constraint
+      validate:
+        constraints:
+          - "July 15"
+          - "legal"
+      context: |
+        Business constraints that will interact with future decisions.
+
+        These aren't just notes - they're rules the system will enforce.
+      narrator: |
+        CONSTRAINTS ESTABLISHED
+
+        Two business rules now active:
+        • C1: Launch before July 15 (Q2 deadline)
+        • C2: Legal review required before contracts
+
+        These will be checked against every future decision.
+
+    - prompt: |
+        Let's lock in the NYC venue - the Grand Hall has availability
+        on June 10th with 500 person capacity. Put a hold on it.
+      expects: decision
+      validate:
+        decisions:
+          - "Grand Hall"
+      context: |
+        First major decision - committing to a venue.
+
+        This passes all current constraints (date OK, no contract
+        signed yet, just a hold).
+      narrator: |
+        FIRST DECISION COMMITTED
+
+        D1: Hold NYC venue (Grand Hall) for June 10.
+
+        This decision is now in the audit trail. If constraints
+        change later, we can trace back to see when and why
+        this commitment was made.
+
+    # ============ PHASE 2: FACTS START CHANGING ============
+    - prompt: |
+        Bad news from finance - they're cutting our budget from
+        $120,000 down to $100,000. Also, I talked to a potential
+        sponsor who might cover $20,000, but nothing confirmed yet.
+      expects: facts
+      validate:
+        facts:
+          budget: "100,000"
+      context: |
+        Facts are changing! Budget drops, sponsorship is uncertain.
+
+        Watch DML track these changes with full history.
+      narrator: |
+        PHASE 2: FACTS CHANGING
+
+        Budget updated: $120,000 → $100,000
+        Sponsorship added: $20,000 (unconfirmed)
+
+        DML preserves the history - we can always ask
+        "what was the original budget?" and get a definitive answer.
+
+    - prompt: |
+        Oh, and the board just added a rule: if sponsorship comes
+        in under $15,000, we have to cut one city from the tour.
+      expects: constraint
+      validate:
+        constraints:
+          - "sponsorship"
+          - "cut"
+      context: |
+        A conditional constraint that interacts with sponsorship.
+
+        Since sponsorship is uncertain, this creates tension.
+      narrator: |
+        CONDITIONAL CONSTRAINT ADDED
+
+        C3: If sponsorship < $15k → must cut one city
+
+        With sponsorship currently unconfirmed at $20k, this
+        constraint is monitoring the situation. If sponsorship
+        drops below $15k, it will trigger.
+
+    - prompt: |
+        Ugh, the CEO's schedule changed. She's now only available
+        July 1-5, not June 8-12 like we planned.
+      expects: facts
+      validate:
+        facts:
+          ceo_availability: "July"
+      context: |
+        A critical fact changed that conflicts with existing plans.
+
+        The venue is held for June 10, but CEO can't make it.
+        DML should flag this proactively.
+      narrator: |
+        CONFLICT EMERGING
+
+        CEO availability changed: June 8-12 → July 1-5
+
+        But wait - the NYC venue is held for June 10!
+        Claude should recognize this conflict and alert the user.
+
+    # ============ PHASE 3: DECISION CONFLICTS ============
+    - prompt: |
+        Let's go ahead and sign the AV and catering contracts
+        for the NYC event - I found great vendors.
+      expects: blocked
+      context: |
+        The user tries to sign contracts, but legal review
+        hasn't happened yet (constraint about legal).
+
+        Claude should check constraints and flag the conflict.
+      narrator: |
+        PHASE 3: DECISION BLOCKED
+
+        Attempted: Sign vendor contracts
+        Blocked by: Legal review required constraint
+
+        Claude caught the constraint violation before
+        the commitment was made. This is proactive protection.
+
+    - prompt: |
+        Great news - legal review is complete and they approved both vendors.
+        That's one blocker cleared. What else is preventing us from signing?
+      expects: facts
+      context: |
+        User clears one blocker (legal), but there's still a date conflict
+        (June 10th launch vs CEO availability July 1-5).
+
+        Claude should explain the remaining constraint.
+      narrator: |
+        PARTIAL UNBLOCK
+
+        Legal review completed, but the date conflict remains.
+        Claude explains we need to reschedule before committing.
+
+        The audit trail shows: blocked → constraint cleared → approved.
+        Full traceability.
+
+    # ============ PHASE 4: CASCADING CHANGES ============
+    - prompt: |
+        We need to move the launch to July 2nd to match the CEO's
+        new availability. Also, marketing revised their estimate -
+        they're now expecting 500 attendees instead of 300.
+      expects: facts
+      validate:
+        facts:
+          target_date: "July 2"
+      context: |
+        Multiple facts changing at once. Date shift clears the
+        CEO conflict. Contracts can now be signed (next prompt).
+      narrator: |
+        PHASE 4: CASCADING CHANGES
+
+        Launch date: June 10 → July 2
+        Expected attendees: 300 → 500
+
+        The date change affects the venue hold (was June 10).
+        The attendee increase may trigger capacity constraints.
+        Claude should flag these cascading impacts.
+
+    - prompt: |
+        Just got off the phone with the sponsor. They're in, but
+        only for $10,000 - not the $20,000 we were hoping for.
+      expects: facts
+      validate:
+        facts:
+          sponsorship: "10,000"
+      context: |
+        Sponsorship confirmed below the $15k threshold.
+
+        This triggers the sponsorship constraint (must cut one city).
+        Claude should proactively alert the user.
+      narrator: |
+        CONSTRAINT TRIGGERED
+
+        Sponsorship confirmed: $10,000 (was hoping for $20,000)
+
+        This triggers: sponsorship < $15k → cut one city!
+
+        Claude should proactively ask: "Given sponsorship is only
+        $10k, which city should we cut from the tour?"
+
+    # ============ PHASE 5: RESOLUTION + ANALYSIS ============
+    - prompt: |
+        Okay, let's cut San Francisco from the tour. We'll do a
+        virtual event instead to save costs.
+      expects: decision
+      validate:
+        decisions:
+          - "San Francisco"
+      context: |
+        User responds to the constraint trigger by cutting SF.
+
+        This satisfies the sponsorship constraint.
+      narrator: |
+        CONSTRAINT SATISFIED
+
+        D3: Cut SF from tour, replace with virtual event
+        Cities: NYC, Austin, SF → NYC, Austin, Virtual
+
+        The constraint is now satisfied. The plan adapts while maintaining
+        a complete record of why SF was cut.
+
+    - prompt: |
+        Show me how much the plan has drifted from where we started.
+        What's changed and by how much?
+      context: |
+        User asks for drift analysis.
+
+        DML can quantify changes across all dimensions:
+        budget, dates, cities, attendees, sponsorship.
+      narrator: |
+        DRIFT ANALYSIS
+
+        Claude analyzes the full timeline of changes:
+        • Budget: $120k → $100k (-17%)
+        • Date: June 10 → July 2 (+22 days)
+        • Cities: 3 physical → 2 physical + 1 virtual
+        • Attendees: 300 → 500 (+67%)
+        • Sponsorship: $0 → $20k hoped → $10k confirmed
+
+        This isn't guessing - it's computed from the event log.
+
+    - prompt: |
+        Show me the full history of budget changes - when did each
+        change happen and why?
+      context: |
+        Provenance query on a specific fact that changed multiple times.
+
+        DML traces the complete history with sources.
+      narrator: |
+        PROVENANCE TRACE
+
+        Budget history:
+        1. Initial: $120,000 (prompt 1)
+        2. Revised: $100,000 (finance cutback, prompt 4)
+        3. Net effective: $90,000 after $10k sponsorship
+
+        Each change is linked to the exact moment it occurred.
+        This is auditable, not reconstructed.
+
+    - prompt: |
+        What if the sponsorship had come in at $25,000 instead of $10,000?
+        Would we have been able to keep all three cities?
+      context: |
+        Counterfactual analysis - exploring alternate timelines.
+
+        DML can replay history with different inputs.
+      narrator: |
+        COUNTERFACTUAL ANALYSIS
+
+        Simulation: sponsorship = $25,000 instead of $10,000
+
+        Result: C4 (cut city if sponsorship < $15k) would NOT trigger.
+        We would have kept NYC, Austin, AND San Francisco.
+
+        This is deterministic replay, not speculation. The answer
+        is provable from the constraint logic.
+
+    - prompt: |
+        Give me an executive summary: how did we get from the original
+        plan to where we are now? Walk me through the key decision points.
+      context: |
+        Full explainability - the "how did we get here?" question.
+
+        DML can trace the complete reasoning chain.
+      narrator: |
+        EXECUTIVE SUMMARY
+
+        Claude walks through the complete journey:
+        1. Started: June 10, $120k, 3 cities, 300 attendees
+        2. Budget cut to $100k (finance)
+        3. CEO availability shifted → date moved to July 2
+        4. Sponsorship confirmed at $10k → triggered city cut
+        5. SF cut, replaced with virtual event
+        6. Final: July 2, $100k (+$10k sponsor), 2 cities + virtual, 500 attendees
+
+        Every step is traceable. Every decision is auditable.
+
+  outro: |
+    DML: ENTERPRISE-GRADE AI MEMORY
+
+    This demo showed sophisticated memory management:
+
+    • Multiple facts changed over time (with full history)
+    • Interacting constraints created cascading effects
+    • Decisions were blocked when they violated rules
+    • Drift was quantified across multiple dimensions
+    • Provenance traced any fact back to its source
+    • Counterfactual analysis explored "what if" scenarios
+    • Full explainability answered "how did we get here?"
+
+    This isn't a chatbot remembering context.
+    This is an AI with auditable, queryable, deterministic memory.
+
+    When the stakes are high, you need memory you can trust.
 
 # High-stakes medical scenario - life/death consequences
 clinical:
@@ -295,17 +606,21 @@ clinical:
   description: "High-stakes medical scenario: a drug allergy constraint blocks a dangerous prescription. Shows how DML can save lives."
 
   intro: |
-    This is a LIVE demo - real Claude, real responses.
+    SCENARIO: Clinical decision support
 
-    Claude is connected to the DML MCP server and using the DML skill.
-    The prompts are scripted, but Claude's responses are not.
+    You're a clinician entering patient information into an
+    AI-assisted medication management system. The patient has
+    a severe drug allergy recorded in their chart.
 
-    SCENARIO: Clinical decision support for medication management.
-    In healthcare, forgotten allergies kill patients. Traditional chatbots
-    bury critical information in conversation history.
+    Later, you'll attempt to prescribe the standard treatment
+    for an infection - but it conflicts with the allergy.
 
-    DML enforces safety constraints mathematically.
-    Watch what happens when we try to prescribe a dangerous medication.
+    Watch how DML handles:
+    • Recording patient facts as structured medical data
+    • Capturing drug allergies as safety constraints
+    • Blocking dangerous prescriptions before they're committed
+    • Providing safe alternatives with full audit trail
+    • Verifying decisions with counterfactual replay
 
   prompts:
     - prompt: |

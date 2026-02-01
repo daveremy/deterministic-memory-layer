@@ -46,7 +46,7 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="add_fact",
-            description="Record a learned fact about the user or context. Call this when you learn something new from the conversation.",
+            description="Record a learned fact about the user or context. IMPORTANT: Call this IMMEDIATELY when the user mentions ANY factual information - names, dates, numbers, locations, preferences, budgets, counts, attributes. Do not wait to be asked. Examples: 'planning a trip to Japan' -> add_fact(destination, Japan); 'budget is $4000' -> add_fact(budget, 4000); '6 guests' -> add_fact(guest_count, 6).",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -69,7 +69,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="add_constraint",
-            description="Record a constraint or requirement. Call when user states a requirement or you learn a rule from a mistake.",
+            description="Record a constraint or requirement. IMPORTANT: Call this when user states ANY requirement, restriction, or rule - 'must have', 'need', 'require', 'can't', 'won't', 'never', 'avoid', 'allergic to', 'prefer'. Examples: 'wheelchair accessible' -> add_constraint; 'gluten-free' -> add_constraint; 'no more than $500' -> add_constraint.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -93,7 +93,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="record_decision",
-            description="Record a decision or user confirmation. AUTO-CHECKS ALL CONSTRAINTS. Will be BLOCKED if decision violates any constraint.",
+            description="Record a decision or user confirmation. IMPORTANT: Call this when user confirms, chooses, or commits to something - 'yes', 'sounds good', 'let's do it', 'book it', 'go with that', 'I'll take option X'. AUTO-CHECKS ALL CONSTRAINTS and will be BLOCKED if decision violates any active constraint.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -120,7 +120,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="query_memory",
-            description="Search memory for facts, constraints, or decisions. IMPORTANT: Records a MemoryQueryIssued event for verification tracking.",
+            description="Search memory for facts, constraints, or decisions. Call this BEFORE making recommendations or decisions to check for relevant constraints. Also use when user asks 'what did I say about X' or 'remind me of Y'.",
             inputSchema={
                 "type": "object",
                 "properties": {
