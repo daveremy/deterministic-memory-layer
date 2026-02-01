@@ -6,7 +6,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 
 import yaml
-from rich.console import Console, Group
+from rich.console import Console, Group, RenderableType
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.text import Text
@@ -14,6 +14,7 @@ from rich.live import Live
 from rich.box import ROUNDED, DOUBLE, HEAVY
 from rich.align import Align
 from rich.padding import Padding
+from rich.markdown import Markdown
 
 from dml.events import EventStore
 from dml.replay import ReplayEngine
@@ -96,35 +97,34 @@ class DemoTUI:
             return None, []
 
     def _make_chat_panel(self) -> Panel:
-        """Create chat panel that looks like Claude CLI."""
-        content = Text()
+        """Create chat panel that looks like Claude CLI with markdown rendering."""
+        renderables: list[RenderableType] = []
 
         # Show conversation turns
         visible_turns = self.turns[-3:]  # Show last 3 turns to fit
         for turn in visible_turns:
             # User input with > prefix (like Claude CLI)
+            user_text = Text()
             for i, line in enumerate(turn.user_input.strip().split('\n')):
                 if i == 0:
-                    content.append("> ", style="bright_green bold")
+                    user_text.append("> ", style="bright_green bold")
                 else:
-                    content.append("  ", style="bright_green")
-                content.append(line + "\n", style="white")
-            content.append("\n")
+                    user_text.append("  ", style="bright_green")
+                user_text.append(line + "\n", style="white")
+            renderables.append(user_text)
+            renderables.append(Text(""))  # Spacer
 
-            # Claude response
+            # Claude response - render as markdown
             if turn.claude_response:
-                # Show full response, preserve formatting
-                response_lines = turn.claude_response.split('\n')
-                for line in response_lines:
-                    content.append(line + "\n", style="white")
-                content.append("\n")
+                renderables.append(Markdown(turn.claude_response))
+                renderables.append(Text(""))  # Spacer
 
         # Status line at bottom
         if self.status:
-            content.append(self.status, style="dim italic")
+            renderables.append(Text(self.status, style="dim italic"))
 
         return Panel(
-            content,
+            Group(*renderables) if renderables else Text("(waiting...)", style="dim"),
             title="[bold white]claude[/]",
             border_style="bright_blue",
             box=ROUNDED,
