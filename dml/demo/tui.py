@@ -348,7 +348,7 @@ class DemoApp(App):
             lines.append("")
 
         intro_content.update("\n".join(lines))
-        intro_prompt.update(">>> Press 1, 2, or 3 to select <<<")
+        intro_prompt.update(">>> Press 1, 2, or 3 to select, Q to quit <<<")
 
     def _load_script(self, script_name: str) -> None:
         """Load a specific script and populate overlays."""
@@ -379,7 +379,7 @@ class DemoApp(App):
             intro_content.update(intro)
         else:
             intro_content.update(f"{len(self.prompts)} prompts in this demo.")
-        intro_prompt.update(">>> Press SPACE to start <<<")
+        intro_prompt.update(">>> Press SPACE to start, Q to quit <<<")
 
         # Populate outro overlay
         outro_content = self.query_one("#outro-content", Static)
@@ -463,7 +463,7 @@ class DemoApp(App):
         # Show loading indicator
         loading_container.add_class("visible")
         loading_status.update(f"Prompt {self.current_prompt_index + 1}/{len(self.prompts)}")
-        status_bar.update(f"[{self.current_prompt_index + 1}/{len(self.prompts)}] Sending to Claude...")
+        status_bar.update(f"[{self.current_prompt_index + 1}/{len(self.prompts)}] Sending to Claude... [dim](Q to quit)[/]")
 
         # Add user message to chat with > prefix
         user_lines = prompt.split('\n')
@@ -523,13 +523,13 @@ class DemoApp(App):
                     narrator.update(final_narrator + "\n\n[dim]Auto-advancing in 5 seconds...[/]")
                 else:
                     narrator.update("[dim]Auto-advancing in 5 seconds...[/]")
-                status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Auto-advancing...")
+                status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Auto-advancing... [dim](Q to quit)[/]")
             else:
                 if final_narrator:
                     narrator.update(final_narrator + "\n\n[bold green]>>> Press SPACE to continue <<<[/]")
                 else:
                     narrator.update("[bold green]>>> Press SPACE to continue <<<[/]")
-                status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Press SPACE for next prompt")
+                status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Press SPACE to continue, Q to quit")
 
         self.is_running = False
 
