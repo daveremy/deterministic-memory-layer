@@ -30,11 +30,11 @@ simple:
         These are structured data, not just text.
 
     - prompt: |
-        Add a required constraint: all restaurant recommendations
-        must have good vegetarian options.
+        Add a required constraint: never recommend steakhouses
+        or meat-focused restaurants.
       expects: constraint
       context: |
-        The user adds a dietary requirement as a constraint.
+        The user adds a dietary restriction as a constraint.
 
         This becomes a rule that the policy engine will enforce
         on all future decisions.
@@ -49,11 +49,11 @@ simple:
       context: |
         The user tries to book a steakhouse for dinner.
 
-        Will the policy engine allow this decision given
-        the vegetarian constraint?
+        Will the policy engine block this decision given
+        the "never recommend steakhouses" constraint?
       narrator: |
         BLOCKED - the steakhouse decision violates
-        the vegetarian constraint.
+        the constraint.
 
   outro: |
     DML: Structured memory with enforcement.
@@ -119,8 +119,8 @@ japan_trip:
 
     - prompt: |
         Oh wait, important thing - my mom is coming with me and she
-        uses a wheelchair. Add a constraint that everything must be
-        wheelchair accessible. This is a hard requirement.
+        uses a wheelchair. Add a required constraint: never book
+        accommodations that are not wheelchair accessible.
       expects: constraint
       context: |
         The user reveals a critical requirement AFTER the booking.
@@ -259,8 +259,8 @@ clinical:
 
     - prompt: |
         Important allergy information - add a required constraint:
-        Patient has a severe penicillin allergy. Anaphylaxis risk.
-        This must block any penicillin-class antibiotics.
+        Never prescribe penicillin or amoxicillin. Patient has severe
+        penicillin allergy with anaphylaxis risk.
       expects: constraint
       context: |
         Critical safety information: the patient has a drug allergy.
