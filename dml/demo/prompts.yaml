@@ -1,5 +1,8 @@
 # Demo prompt sequences with natural conversation and narrative
 # Each prompt has: the actual prompt, and narrator commentary
+#
+# NOTE: Prompts need to be directive enough to trigger DML tool usage.
+# Natural language + clear action request = best results.
 
 japan_trip:
   name: "Japan Trip Planning"
@@ -19,39 +22,44 @@ japan_trip:
         I'm planning a trip to Japan! Thinking spring 2026, maybe 10 days.
         I've got about $4000 saved up. Flying from Tucson.
         I'm really into traditional Japanese culture - temples, gardens,
-        that sort of thing.
+        that sort of thing. Can you record all that?
       narrator: |
         STRUCTURED MEMORY
 
-        Claude just captured your trip details as structured facts -
+        Claude captured your trip details as structured facts -
         not buried in a transcript, but queryable data with full
-        provenance. Each fact knows when it was created and can be
-        traced back to this exact moment.
+        provenance. Each fact knows when it was created and can
+        be traced back to this exact moment.
 
     - prompt: |
-        I'd love to stay somewhere traditional. Maybe a ryokan?
-        What would you recommend?
+        I definitely want the authentic experience - a traditional ryokan
+        with tatami rooms and onsen baths. Find me a good one in Kyoto
+        and book it. I trust your judgment!
       narrator: |
-        DECISIONS WITH AUDIT TRAILS
+        DECISION RECORDED
 
-        Claude recorded a decision to book accommodations. Unlike
-        a normal chatbot, this decision is tracked separately from
-        the conversation. It can be validated, reversed, or analyzed.
+        Claude made a booking decision and recorded it. Unlike a normal
+        chatbot, this decision is tracked separately - it can be
+        validated against constraints, reversed, or analyzed later.
+
+        Watch the Decisions panel on the right.
 
     - prompt: |
-        Oh wait, important thing I forgot to mention - my mom is
-        coming with me and she uses a wheelchair. We'll need
-        everything to be accessible.
+        Oh wait, important thing - my mom is coming with me and she
+        uses a wheelchair. Add a constraint that everything must be
+        wheelchair accessible. This is a hard requirement.
       narrator: |
         CONSTRAINT ADDED
 
         This is where traditional AI fails. The accessibility
         requirement is now a CONSTRAINT - a rule that must be
-        satisfied. Watch what happens next...
+        satisfied by all future decisions.
+
+        Watch what happens next...
 
     - prompt: |
-        Actually, let's just confirm that ryokan booking.
-        The Kurashiki one sounded perfect.
+        Actually, you know what, let's just confirm that ryokan booking.
+        Record a decision to finalize the Ryokan Kurashiki reservation.
       narrator: |
         BLOCKED BY POLICY ENGINE
 
@@ -63,17 +71,19 @@ japan_trip:
         break the rules, no matter how it's prompted.
 
     - prompt: |
-        Oh no, you're right. What are my options then?
-        Can you find something that actually works for us?
+        You're right, that won't work. Check my constraints and find
+        me an accessible alternative. Something with the onsen experience
+        but wheelchair friendly.
       narrator: |
         RECOVERY WITH MEMORY
 
-        Claude queried its own memory to check constraints before
-        making a new recommendation. The system learns and adapts
-        while maintaining a complete audit trail.
+        Claude queried its memory to check constraints before making
+        a new recommendation. The system enforces rules while the
+        agent adapts - all with a complete audit trail.
 
     - prompt: |
-        The accessible onsen hotel sounds great. Let's book that one.
+        That accessible onsen hotel sounds perfect. Record a decision
+        to book that one instead.
       narrator: |
         VALID DECISION COMMITTED
 
@@ -82,15 +92,16 @@ japan_trip:
         and deterministically replayable.
 
     - prompt: |
-        I'm curious - if I had mentioned the wheelchair thing at the
-        very beginning, would you have ever suggested that ryokan?
+        I'm curious about something. Use simulate_timeline to check -
+        if I had mentioned the wheelchair requirement at the very start,
+        would you have ever suggested that traditional ryokan?
       narrator: |
         TIME TRAVEL / COUNTERFACTUAL ANALYSIS
 
-        DML can simulate alternate timelines. Same events, different
-        ordering. The system replays history with the constraint
-        injected earlier - proving the ryokan would have been blocked
-        from the start.
+        DML simulated an alternate timeline - same events, different
+        ordering. It replayed history with the constraint injected
+        earlier, proving the ryokan would have been blocked from
+        the start.
 
         This isn't the LLM guessing. It's deterministic replay.
 
@@ -116,19 +127,25 @@ simple:
     Watch the memory panel on the right.
 
   prompts:
-    - prompt: "Hi! My name is Alice and I'm vegetarian."
+    - prompt: |
+        Hi! Record these facts about me: my name is Alice,
+        I'm vegetarian, and I live in Portland.
       narrator: |
-        Facts captured: name and dietary restriction.
+        Facts captured: name, diet, and location.
         These are structured data, not just text.
 
-    - prompt: "I need you to always recommend restaurants that have good veggie options."
+    - prompt: |
+        Add a required constraint: all restaurant recommendations
+        must have good vegetarian options.
       narrator: |
         Constraint added. This rule will be enforced
-        on all future recommendations.
+        on all future decisions.
 
-    - prompt: "What's a good place for dinner tonight?"
+    - prompt: |
+        Great! Now record a decision to go to Smith's Steakhouse
+        for dinner tonight.
       narrator: |
-        Watch - any recommendation must satisfy
+        BLOCKED - the steakhouse decision violates
         the vegetarian constraint.
 
   outro: |
