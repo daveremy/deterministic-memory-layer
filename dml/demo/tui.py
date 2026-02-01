@@ -581,7 +581,7 @@ class DemoApp(App):
         return None
 
     async def run_claude(self, prompt: str, continue_session: bool = False) -> str:
-        """Run claude -p command asynchronously."""
+        """Run claude -p command asynchronously in a temp directory."""
         cmd = [
             "claude", "-p", prompt.strip(),
             "--allowedTools", "mcp__dml__*",
@@ -590,11 +590,17 @@ class DemoApp(App):
         if continue_session:
             cmd.append("-c")
 
+        # Run in temp directory to prevent Claude from modifying repo files
+        import tempfile
+        demo_dir = Path(tempfile.gettempdir()) / "dml-demo"
+        demo_dir.mkdir(exist_ok=True)
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=str(demo_dir),
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
             return stdout.decode().strip()
