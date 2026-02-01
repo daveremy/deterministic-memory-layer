@@ -2,6 +2,7 @@
 
 import subprocess
 import asyncio
+import uuid
 from pathlib import Path
 from dataclasses import dataclass, field
 
@@ -235,6 +236,7 @@ class DemoApp(App):
         self.demo_started = False
         self.script_selected = script_name is not None
         self.available_scripts = []
+        self.session_id = str(uuid.uuid4())  # Unique session for this demo run
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -580,7 +582,11 @@ class DemoApp(App):
 
     async def run_claude(self, prompt: str, continue_session: bool = False) -> str:
         """Run claude -p command asynchronously."""
-        cmd = ["claude", "-p", prompt.strip(), "--allowedTools", "mcp__dml__*"]
+        cmd = [
+            "claude", "-p", prompt.strip(),
+            "--allowedTools", "mcp__dml__*",
+            "--session-id", self.session_id,  # Isolate demo from other Claude sessions
+        ]
         if continue_session:
             cmd.append("-c")
 
