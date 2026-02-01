@@ -42,6 +42,11 @@ Facts captured from natural conversation, fact updates with history preserved, c
 
 Constraint-aware reasoning catches a conflict between a traditional ryokan booking and wheelchair accessibility requirements. Shows explainability and counterfactual analysis.
 
+### Product Launch: Complex Planning (Advanced)
+[![asciicast](https://asciinema.org/a/raqQkjB2bOSlrBqp.svg)](https://asciinema.org/a/raqQkjB2bOSlrBqp)
+
+Multi-phase scenario with evolving budget, dates, and constraints. Shows drift analysis, provenance traces, and counterfactual "what if" analysis across 15 prompts.
+
 ---
 
 ## The Idea
