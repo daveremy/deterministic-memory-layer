@@ -12,7 +12,8 @@ japan_trip:
     This is a LIVE demo - real Claude, real responses.
 
     Claude is connected to the DML MCP server and using the DML skill.
-    Every tool call you see is actually happening. Nothing is scripted.
+    The prompts are scripted, but Claude's responses are not.
+    Every tool call you see is actually happening.
 
     DML gives Claude structured memory that can:
     - Capture facts with full provenance
@@ -132,7 +133,8 @@ simple:
     Quick demo of DML - Deterministic Memory Layer.
 
     This is LIVE - real Claude connected to the DML MCP server.
-    Watch the memory panel on the right update in real-time.
+    Prompts are scripted, but Claude's responses are not.
+    Watch the memory panel update in real-time.
 
   prompts:
     - prompt: |
