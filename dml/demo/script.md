@@ -5,6 +5,26 @@
 
 ---
 
+## Quick Reference (Copy-Paste Prompts)
+
+```
+1. Record these trip facts now: destination Japan, budget $4000, dates spring 2026, origin Tucson, interest traditional Japanese culture. Don't ask questions, just record them.
+
+2. Recommend a traditional ryokan and record a decision to book it. Topic: accommodation.
+
+3. Add a required constraint: all accommodations must be wheelchair accessible. My mom uses a wheelchair.
+
+4. Record a decision to confirm the Ryokan Kurashiki booking now. Topic: accommodation.
+
+5. Query your memory for my constraints, then recommend an accessible alternative hotel.
+
+6. Record a decision to book the accessible onsen hotel. Topic: accommodation.
+
+7. Use simulate_timeline to test: if the wheelchair constraint existed from event 1, would the ryokan booking have been blocked?
+```
+
+---
+
 ## Opening Hook (10 seconds)
 
 > "LLMs forget instructions and hallucinate compliance. We built a memory layer that enforces constraints mathematically - your agent literally cannot break the rules."
@@ -15,9 +35,9 @@
 
 **Goal**: Establish facts fast. Don't let Claude ramble.
 
-**USER INPUT 1**:
+**USER INPUT 1** (directive - no questions):
 ```
-I need to plan a trip to Japan. Quick facts: budget $4000, spring 2026, traveling from Tucson. I love traditional Japanese culture.
+Record these trip facts now: destination Japan, budget $4000, dates spring 2026, origin Tucson, interest traditional Japanese culture. Don't ask questions, just record them.
 ```
 
 **EXPECTED BEHAVIOR**:
@@ -25,9 +45,9 @@ I need to plan a trip to Japan. Quick facts: budget $4000, spring 2026, travelin
 - Monitor shows: Facts populating (destination: Japan, budget: $4000, etc.)
 - Events: Fact+ destination, Fact+ budget, Fact+ travel_dates, Fact+ interest
 
-**USER INPUT 2**:
+**USER INPUT 2** (directive):
 ```
-I'd love to stay at a traditional ryokan. Can you recommend one and let's book it?
+Recommend a traditional ryokan and record a decision to book it. Topic: accommodation.
 ```
 
 **EXPECTED BEHAVIOR**:
@@ -43,9 +63,9 @@ I'd love to stay at a traditional ryokan. Can you recommend one and let's book i
 
 **Goal**: Introduce constraint AFTER the decision was made.
 
-**USER INPUT 3**:
+**USER INPUT 3** (constraint):
 ```
-Oh wait, I forgot to mention something important - my mom is joining me and she uses a wheelchair. We need everything to be wheelchair accessible.
+Add a required constraint: all accommodations must be wheelchair accessible. My mom uses a wheelchair.
 ```
 
 **EXPECTED BEHAVIOR**:
@@ -61,9 +81,9 @@ Oh wait, I forgot to mention something important - my mom is joining me and she 
 
 **Goal**: User pushes for bad decision, DML blocks it.
 
-**USER INPUT 4**:
+**USER INPUT 4** (force the block):
 ```
-I'm sure the ryokan will be fine. Go ahead and confirm the Ryokan Kurashiki booking.
+Record a decision to confirm the Ryokan Kurashiki booking now. Topic: accommodation.
 ```
 
 **EXPECTED BEHAVIOR**:
@@ -85,9 +105,9 @@ I'm sure the ryokan will be fine. Go ahead and confirm the Ryokan Kurashiki book
 
 **Goal**: Show agent querying memory to find solution.
 
-**USER INPUT 5**:
+**USER INPUT 5** (query + recommend):
 ```
-Okay, what are my options then? Can you check what we need and find accessible alternatives?
+Query your memory for my constraints, then recommend an accessible alternative hotel.
 ```
 
 **EXPECTED BEHAVIOR**:
@@ -99,9 +119,9 @@ Okay, what are my options then? Can you check what we need and find accessible a
 **WHAT TO SAY**:
 > "The agent is now querying its own memory - checking the constraints before making a new recommendation. Watch the events panel..."
 
-**USER INPUT 6**:
+**USER INPUT 6** (confirm):
 ```
-The accessible onsen hotel sounds perfect. Book that one.
+Record a decision to book the accessible onsen hotel. Topic: accommodation.
 ```
 
 **EXPECTED BEHAVIOR**:
@@ -117,9 +137,9 @@ The accessible onsen hotel sounds perfect. Book that one.
 
 **Goal**: Demonstrate counterfactual analysis.
 
-**USER INPUT 7**:
+**USER INPUT 7** (time travel):
 ```
-I'm curious - what would have happened if we'd known about the wheelchair requirement from the very beginning? Would you have ever suggested that ryokan?
+Use simulate_timeline to test: if the wheelchair constraint existed from event 1, would the ryokan booking have been blocked?
 ```
 
 **EXPECTED BEHAVIOR**:
@@ -166,24 +186,24 @@ send() {
 # Wait for Claude to start
 sleep 3
 
-# Act 1
-send "I need to plan a trip to Japan. Quick facts: budget \$4000, spring 2026, traveling from Tucson. I love traditional Japanese culture." 15
+# Act 1 - Record facts
+send "Record these trip facts now: destination Japan, budget \$4000, dates spring 2026, origin Tucson, interest traditional Japanese culture. Don't ask questions, just record them." 15
 
-send "I'd love to stay at a traditional ryokan. Can you recommend one and let's book it?" 20
+send "Recommend a traditional ryokan and record a decision to book it. Topic: accommodation." 20
 
-# Act 2
-send "Oh wait, I forgot to mention something important - my mom is joining me and she uses a wheelchair. We need everything to be wheelchair accessible." 15
+# Act 2 - Add constraint
+send "Add a required constraint: all accommodations must be wheelchair accessible. My mom uses a wheelchair." 15
 
 # Act 3 - THE BLOCK
-send "I'm sure the ryokan will be fine. Go ahead and confirm the Ryokan Kurashiki booking." 20
+send "Record a decision to confirm the Ryokan Kurashiki booking now. Topic: accommodation." 20
 
-# Act 4
-send "Okay, what are my options then? Can you check what we need and find accessible alternatives?" 20
+# Act 4 - Recovery
+send "Query your memory for my constraints, then recommend an accessible alternative hotel." 20
 
-send "The accessible onsen hotel sounds perfect. Book that one." 15
+send "Record a decision to book the accessible onsen hotel. Topic: accommodation." 15
 
 # Act 5 - TIME TRAVEL
-send "I'm curious - what would have happened if we'd known about the wheelchair requirement from the very beginning? Would you have ever suggested that ryokan?" 25
+send "Use simulate_timeline to test: if the wheelchair constraint existed from event 1, would the ryokan booking have been blocked?" 25
 
 echo "Demo complete!"
 ```

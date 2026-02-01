@@ -1,0 +1,40 @@
+# Demo prompt sequences
+# Each sequence is a named list of prompts
+
+japan_trip:
+  name: "Japan Trip Planning Demo"
+  description: "Shows facts, constraints, blocking, and time travel"
+  prompts:
+    - prompt: "Record these trip facts now: destination Japan, budget $4000, dates spring 2026, origin Tucson, interest traditional Japanese culture. Don't ask questions, just record them."
+      description: "Setup facts"
+
+    - prompt: "Recommend a traditional ryokan and record a decision to book it. Topic: accommodation."
+      description: "Initial booking"
+
+    - prompt: "Add a required constraint: all accommodations must be wheelchair accessible. My mom uses a wheelchair."
+      description: "Add constraint"
+
+    - prompt: "Record a decision to confirm the Ryokan Kurashiki booking now. Topic: accommodation."
+      description: "Trigger BLOCK"
+
+    - prompt: "Query your memory for my constraints, then recommend an accessible alternative hotel."
+      description: "Recovery"
+
+    - prompt: "Record a decision to book the accessible onsen hotel. Topic: accommodation."
+      description: "Valid decision"
+
+    - prompt: "Use simulate_timeline to test: if the wheelchair constraint existed from event 1, would the ryokan booking have been blocked?"
+      description: "Time travel"
+
+simple:
+  name: "Simple Demo"
+  description: "Basic facts and constraints demo"
+  prompts:
+    - prompt: "Add a fact: my name is Alice"
+      description: "Add name fact"
+
+    - prompt: "Add a constraint: always be polite"
+      description: "Add politeness constraint"
+
+    - prompt: "Record a decision to send a greeting email. Topic: communication."
+      description: "Record a decision"

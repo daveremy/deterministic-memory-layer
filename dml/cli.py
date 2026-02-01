@@ -862,8 +862,20 @@ def demo(ctx: click.Context) -> None:
 @cli.command("chat-demo")
 def chat_demo() -> None:
     """Run the scripted chat demo with ClawdMeister."""
-    from dml.chat_demo import main
+    from dml.demo.chat_demo import main
     main()
+
+
+@cli.command("live")
+@click.option("--script", default="japan_trip", help="Demo script name from prompts.yaml")
+@click.option("--pause", is_flag=True, help="Wait for keypress between prompts")
+@click.pass_context
+def live_tui(ctx: click.Context, script: str, pause: bool) -> None:
+    """Run scripted demo with real Claude and live monitor."""
+    from dml.demo.tui import DemoTUI
+    db_path = ctx.obj.get("db_path") if ctx.obj else None
+    demo = DemoTUI(script_name=script, pause_between=pause, db_path=db_path)
+    demo.run()
 
 
 @cli.command()
