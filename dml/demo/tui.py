@@ -336,11 +336,16 @@ class DemoApp(App):
             or os.environ.get("WANDB_DASHBOARD_URL")
             or "https://wandb.ai/daveremy-remzota-labs/dml-mcp-server/weave"
         )
-        # Typewriter effect state
-        self._typewriter_words: list[str] = []
-        self._typewriter_index: int = 0
+        # Karaoke highlight effect state
+        self._typewriter_text: str = ""
         self._typewriter_suffix: str = ""
         self._typewriter_timer = None
+        self._highlight_sentences: list[str] = []
+        self._highlight_idx: int = 0
+        self._highlight_ticks: int = 0
+        self._static_suffix: str = ""
+        self._intro_menu_text: str = ""
+        self._outro_text: str = "Demo complete!"
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -447,8 +452,8 @@ class DemoApp(App):
 
         intro_title.update("[bold]Deterministic Memory Layer[/]")
 
-        # Build content with context and script list
-        lines = [
+        # Build informational content (highlighted)
+        info_lines = [
             "[bold cyan]What is DML?[/]",
             "DML gives AI agents structured, auditable memory. It's an [bold]MCP server[/]",
             "that Claude connects to - a standardized tool interface for memory operations.",
@@ -466,6 +471,10 @@ class DemoApp(App):
             "[bold cyan]This Demo[/]",
             "This is [bold]LIVE[/] - real Claude, real responses. Prompts are scripted but",
             "Claude's responses are not. Watch the right panels update in real-time.",
+        ]
+
+        # Build menu content (shown immediately, not highlighted)
+        menu_lines = [
             "",
             "[bold]Select a demo:[/]",
             "",
@@ -473,17 +482,29 @@ class DemoApp(App):
         for i, (key, script) in enumerate(all_scripts.items(), 1):
             name = script.get("name", key)
             desc = script.get("description", "")
-            lines.append(f"  [bold cyan]{i}[/]  [bold]{name}[/]")
+            menu_lines.append(f"  [bold cyan]{i}[/]  [bold]{name}[/]")
             if desc:
-                lines.append(f"      {desc}")
-            lines.append("")
+                menu_lines.append(f"      {desc}")
+            menu_lines.append("")
 
-        intro_content.update("\n".join(lines))
+        # Store menu text to append after highlighting completes
+        self._intro_menu_text = "\n".join(menu_lines)
+
+        # Use highlight effect for info section only
         num_scripts = len(all_scripts)
         if num_scripts <= 3:
-            intro_prompt.update(">>> Press 1, 2, or 3 to select  •  R to record  •  Q to quit <<<")
+            prompt_text = "[bold green]>>> Press 1, 2, or 3 to select  •  R to record  •  Q to quit <<<[/]"
         else:
-            intro_prompt.update(f">>> Press 1-{num_scripts} to select  •  R to record  •  Q to quit <<<")
+            prompt_text = f"[bold green]>>> Press 1-{num_scripts} to select  •  R to record  •  Q to quit <<<[/]"
+        intro_prompt.update("")  # Hide until highlighting completes
+        self._start_typewriter(
+            "\n".join(info_lines),
+            prompt_text,
+            target_id="#intro-content",
+            words_per_tick=4,
+            suffix_target_id="#intro-prompt",
+            static_suffix=self._intro_menu_text,  # Menu shown immediately below
+        )
 
     def _load_script(self, script_name: str) -> None:
         """Load a specific script and populate overlays."""
@@ -515,23 +536,24 @@ class DemoApp(App):
         # Refresh state display to show empty state
         self.refresh_dml_state()
 
-        # Populate intro overlay
+        # Populate intro overlay with typewriter effect
         intro_title = self.query_one("#intro-title", Static)
-        intro_content = self.query_one("#intro-content", Static)
         intro_prompt = self.query_one("#intro-prompt", Static)
 
         intro_title.update(f"[bold]{display_name}[/]")
         intro = self.script.get("intro", "").strip()
-        if intro:
-            intro_content.update(intro)
-        else:
-            intro_content.update(f"{len(self.prompts)} prompts in this demo.")
-        intro_prompt.update(">>> Press ENTER/SPACE to start, Q to quit <<<")
+        intro_text = intro if intro else f"{len(self.prompts)} prompts in this demo."
+        intro_prompt.update("")  # Hide until typewriter completes
+        self._start_typewriter(
+            intro_text,
+            "[bold green]>>> Press ENTER/SPACE to start, Q to quit <<<[/]",
+            target_id="#intro-content",
+            words_per_tick=3,
+            suffix_target_id="#intro-prompt",
+        )
 
-        # Populate outro overlay
-        outro_content = self.query_one("#outro-content", Static)
-        outro = self.script.get("outro", "Demo complete!").strip()
-        outro_content.update(outro + "\n\n[bold green]>>> Press ENTER/SPACE to return to menu, Q to quit <<<[/]")
+        # Store outro text for typewriter effect when shown
+        self._outro_text = self.script.get("outro", "Demo complete!").strip()
 
     def action_select_script(self, number: int) -> None:
         """Handle script selection by number key."""
@@ -577,6 +599,135 @@ class DemoApp(App):
 
         # Exit and relaunch with asciinema
         self.exit(result=("record", str(output_file)))
+
+    def _start_typewriter(
+        self,
+        text: str,
+        suffix: str = "",
+        target_id: str = "#narrator-content",
+        words_per_tick: int = 2,  # unused, kept for compatibility
+        suffix_target_id: str | None = None,
+        static_suffix: str = "",  # Text shown immediately below (not highlighted)
+    ) -> None:
+        """Start karaoke-style highlight effect - shows all text, highlights current sentence.
+
+        Args:
+            text: The text to display (will be highlighted sentence by sentence)
+            suffix: Text to show after highlighting completes (e.g., "Press ENTER...")
+            target_id: CSS selector for the Static widget to update
+            words_per_tick: Unused (kept for API compatibility)
+            suffix_target_id: If provided, suffix goes to this separate widget instead of appending
+            static_suffix: Text shown immediately below highlighted text (not part of highlighting)
+        """
+        import re
+
+        # Cancel any existing effect
+        if self._typewriter_timer:
+            self._typewriter_timer.stop()
+            self._typewriter_timer = None
+
+        # Store state
+        self._typewriter_text = text or ""
+        self._typewriter_suffix = suffix
+        self._typewriter_target = target_id
+        self._typewriter_suffix_target = suffix_target_id
+        self._static_suffix = static_suffix
+
+        # Split into sentences (keep delimiters, handle abbreviations loosely)
+        # Match sentences ending with .!? followed by space/newline or end
+        self._highlight_sentences = []
+        if self._typewriter_text:
+            # Split on sentence boundaries but keep the structure
+            parts = re.split(r'(?<=[.!?])(?=\s|$)', self._typewriter_text)
+            self._highlight_sentences = [p for p in parts if p.strip()]
+
+        self._highlight_idx = 0
+        self._highlight_ticks = 0  # Ticks spent on current sentence
+
+        if not self._highlight_sentences:
+            # No text, just show suffix
+            try:
+                if suffix_target_id:
+                    self.query_one(suffix_target_id, Static).update(suffix)
+                else:
+                    self.query_one(target_id, Static).update(suffix)
+            except Exception:
+                pass
+            return
+
+        # Show initial state with first sentence highlighted
+        self._update_highlight()
+
+        # Start the timer (tick every 150ms)
+        self._typewriter_timer = self.set_interval(0.15, self._typewriter_tick)
+
+    def _update_highlight(self) -> None:
+        """Update display with current sentence highlighted."""
+        if not self._highlight_sentences:
+            return
+
+        # Build text with current sentence highlighted
+        parts = []
+        for i, sentence in enumerate(self._highlight_sentences):
+            if i == self._highlight_idx:
+                # Highlight current sentence (yellow/bold)
+                parts.append(f"[bold yellow]{sentence}[/]")
+            else:
+                # Dim completed sentences, normal for upcoming
+                if i < self._highlight_idx:
+                    parts.append(f"[dim]{sentence}[/]")
+                else:
+                    parts.append(sentence)
+
+        highlighted_text = "".join(parts)
+
+        # Append static suffix (e.g., menu) if present
+        if self._static_suffix:
+            highlighted_text += self._static_suffix
+
+        try:
+            target = self.query_one(self._typewriter_target, Static)
+            target.update(highlighted_text)
+        except Exception:
+            pass
+
+    def _typewriter_tick(self) -> None:
+        """Advance the sentence highlight."""
+        if self._highlight_idx >= len(self._highlight_sentences):
+            # Done - show final text and suffix
+            if self._typewriter_timer:
+                self._typewriter_timer.stop()
+                self._typewriter_timer = None
+
+            try:
+                target = self.query_one(self._typewriter_target, Static)
+                final_text = self._typewriter_text
+                if self._static_suffix:
+                    final_text += self._static_suffix
+                target.update(final_text)  # Show clean text
+
+                # Show suffix in appropriate location
+                if self._typewriter_suffix:
+                    if self._typewriter_suffix_target:
+                        self.query_one(self._typewriter_suffix_target, Static).update(self._typewriter_suffix)
+                    else:
+                        target.update(final_text + "\n\n" + self._typewriter_suffix)
+            except Exception:
+                pass
+            return
+
+        # Calculate how long to stay on this sentence based on word count
+        current_sentence = self._highlight_sentences[self._highlight_idx]
+        word_count = len(current_sentence.split())
+        # ~250 words per minute = ~4 words per second = ~0.6 ticks per word at 150ms
+        ticks_needed = max(2, int(word_count * 0.6))
+
+        self._highlight_ticks += 1
+        if self._highlight_ticks >= ticks_needed:
+            # Move to next sentence
+            self._highlight_idx += 1
+            self._highlight_ticks = 0
+            self._update_highlight()
 
     def _pane_focusables(self) -> list:
         focusables = []
@@ -1075,10 +1226,16 @@ class DemoApp(App):
         elif self.current_prompt_index < len(self.prompts):
             self.run_next_prompt()
         else:
-            # Show outro overlay
+            # Show outro overlay with typewriter effect
             self.demo_complete = True
             outro_overlay = self.query_one("#outro-overlay")
             outro_overlay.add_class("visible")
+            self._start_typewriter(
+                self._outro_text,
+                "[bold green]>>> Press ENTER/SPACE to return to menu, Q to quit <<<[/]",
+                target_id="#outro-content",
+                words_per_tick=3,
+            )
 
     def _return_to_menu(self) -> None:
         """Return to demo selection menu."""
@@ -1151,9 +1308,13 @@ class DemoApp(App):
         narrator = self.query_one("#narrator-content", Static)
         chat_scroll = self.query_one("#chat-scroll", VerticalScroll)
 
-        # Show context in narrator before sending
+        # Show context in narrator before sending (with karaoke effect)
         if context_text:
-            narrator.update(context_text)
+            self._start_typewriter(
+                context_text,
+                "[dim italic]Waiting for Claude...[/]",
+                target_id="#narrator-content",
+            )
         else:
             narrator.update(f"[dim]Sending prompt {self.current_prompt_index + 1}...[/]")
 
@@ -1180,10 +1341,9 @@ class DemoApp(App):
         await chat_scroll.mount(loading_widget)
         chat_scroll.scroll_end(animate=False)
 
-        # Update narrator to show waiting state while keeping context visible
-        if context_text:
-            narrator.update(context_text + "\n\n[dim italic]Waiting for Claude...[/]")
-        else:
+        # Note: context text karaoke already shows "Waiting for Claude..." as suffix
+        # For no-context case, just show waiting
+        if not context_text:
             narrator.update("[dim italic]Waiting for Claude...[/]")
 
         # Capture state before Claude runs
@@ -1222,25 +1382,21 @@ class DemoApp(App):
         if is_complete:
             status_bar.update("[bold]Demo complete![/] Press ENTER/SPACE to see summary, Q to quit.")
             if final_narrator:
-                narrator.update(final_narrator)
+                self._start_typewriter(final_narrator, "[bold green]>>> Press ENTER/SPACE for summary <<<[/]")
             else:
-                narrator.update("[bold]Demo complete![/]")
+                self._start_typewriter("[bold]Demo complete![/]", "[bold green]>>> Press ENTER/SPACE for summary <<<[/]")
         else:
-            # Update narrator with commentary
+            # Update narrator with commentary using typewriter effect
             if self.auto_advance:
-                if final_narrator:
-                    narrator.update(final_narrator + "\n\n[dim]Auto-advancing in 5 seconds...[/]")
-                else:
-                    narrator.update("[dim]Auto-advancing in 5 seconds...[/]")
+                suffix = "[dim]Auto-advancing in 5 seconds...[/]"
+                self._start_typewriter(final_narrator or "", suffix)
                 status_bar.update(
                     f"[{self.current_prompt_index}/{len(self.prompts)}] Auto-advancing... "
                     "[dim](Q to quit)[/]"
                 )
             else:
-                if final_narrator:
-                    narrator.update(final_narrator + "\n\n[bold green]>>> Press ENTER/SPACE to continue <<<[/]")
-                else:
-                    narrator.update("[bold green]>>> Press ENTER/SPACE to continue <<<[/]")
+                suffix = "[bold green]>>> Press ENTER/SPACE to continue <<<[/]"
+                self._start_typewriter(final_narrator or "", suffix)
                 status_bar.update(
                     f"[{self.current_prompt_index}/{len(self.prompts)}] Press ENTER/SPACE to continue, Q to quit"
                 )

@@ -6,6 +6,7 @@
 
 ## Table of Contents
 
+- [Demo](#demo)
 - [The Idea](#the-idea)
 - [The Problem](#the-problem)
 - [The Approach](#the-approach)
@@ -24,6 +25,16 @@
 - [Documentation](#documentation)
 - [Project Structure](#project-structure)
 - [Acknowledgments](#acknowledgments)
+
+---
+
+## Demo
+
+Watch DML in action with a live Claude session:
+
+[![asciicast](https://asciinema.org/a/poksmLtZA784MzjQ.svg)](https://asciinema.org/a/poksmLtZA784MzjQ)
+
+*Claude captures facts, tracks changes, and checks constraints in real-time as users describe a dinner party scenario.*
 
 ---
 
