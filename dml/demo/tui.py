@@ -124,22 +124,13 @@ CSS = """
     padding: 0 1;
 }
 
-#loading-container {
+.inline-loading {
     height: auto;
-    padding: 1;
-    background: $primary-darken-3;
-    display: none;
-}
-
-#loading-container.visible {
-    display: block;
-}
-
-#loading-status {
+    padding: 0 0 1 0;
     color: $primary-lighten-2;
 }
 
-LoadingIndicator {
+.inline-loading LoadingIndicator {
     height: 1;
     color: $primary;
 }
@@ -249,9 +240,6 @@ class DemoApp(App):
             with Vertical(id="left-pane"):
                 with Vertical(id="chat-container"):
                     yield Label(" claude ", classes="panel-title")
-                    with Horizontal(id="loading-container"):
-                        yield LoadingIndicator()
-                        yield Static("Waiting for Claude...", id="loading-status")
                     yield VerticalScroll(id="chat-scroll")
 
                 with Vertical(id="narrator-container"):
@@ -443,8 +431,6 @@ class DemoApp(App):
         # Get UI elements
         status_bar = self.query_one("#status-bar", Static)
         narrator = self.query_one("#narrator-content", Static)
-        loading_container = self.query_one("#loading-container")
-        loading_status = self.query_one("#loading-status", Static)
         chat_scroll = self.query_one("#chat-scroll", VerticalScroll)
 
         # Show context in narrator before sending
@@ -453,9 +439,6 @@ class DemoApp(App):
         else:
             narrator.update(f"[dim]Sending prompt {self.current_prompt_index + 1}...[/]")
 
-        # Show loading indicator
-        loading_container.add_class("visible")
-        loading_status.update(f"Prompt {self.current_prompt_index + 1}/{len(self.prompts)}")
         status_bar.update(f"[{self.current_prompt_index + 1}/{len(self.prompts)}] Sending to Claude... [dim](Q to quit)[/]")
 
         # Add user message to chat with > prefix
@@ -465,6 +448,15 @@ class DemoApp(App):
             prefix = "> " if i == 0 else "  "
             user_text += f"{prefix}{line}\n"
         await chat_scroll.mount(Static(user_text, classes="user-prompt"))
+
+        # Add inline loading indicator after user message
+        loading_widget = Horizontal(
+            LoadingIndicator(),
+            Static(" Claude is thinking..."),
+            classes="inline-loading",
+            id="inline-loading"
+        )
+        await chat_scroll.mount(loading_widget)
         chat_scroll.scroll_end(animate=False)
 
         # Update narrator to show waiting state while keeping context visible
@@ -472,7 +464,6 @@ class DemoApp(App):
             narrator.update(context_text + "\n\n[dim italic]Waiting for Claude...[/]")
         else:
             narrator.update("[dim italic]Waiting for Claude...[/]")
-        loading_status.update("Claude is thinking...")
 
         # Capture state before Claude runs
         state_before = self._get_dml_state()
@@ -487,8 +478,12 @@ class DemoApp(App):
         expects = prompt_data.get("expects")
         expectation_warning = self._check_expectation(expects, state_before, state_after)
 
-        # Hide loading indicator
-        loading_container.remove_class("visible")
+        # Remove inline loading indicator
+        try:
+            loading_widget = self.query_one("#inline-loading")
+            await loading_widget.remove()
+        except Exception:
+            pass
 
         # Add Claude response as markdown
         await chat_scroll.mount(Markdown(response, classes="claude-response"))
