@@ -4,6 +4,60 @@
 # NOTE: Prompts need to be directive enough to trigger DML tool usage.
 # Natural language + clear action request = best results.
 
+simple:
+  name: "Quick Demo"
+  description: "3 prompts: record facts, add a constraint, watch it block a violating decision. Fast intro to core concepts."
+
+  intro: |
+    Quick demo of DML - Deterministic Memory Layer.
+
+    This is LIVE - real Claude connected to the DML MCP server.
+    Prompts are scripted, but Claude's responses are not.
+    Watch the memory panel update in real-time.
+
+  prompts:
+    - prompt: |
+        Hi! Record these facts about me: my name is Alice,
+        I'm vegetarian, and I live in Portland.
+      expects: facts
+      context: |
+        The user introduces themselves with basic facts.
+
+        Watch the Facts panel - these will be captured as
+        structured, queryable data.
+      narrator: |
+        Facts captured: name, diet, and location.
+        These are structured data, not just text.
+
+    - prompt: |
+        Add a required constraint: all restaurant recommendations
+        must have good vegetarian options.
+      expects: constraint
+      context: |
+        The user adds a dietary requirement as a constraint.
+
+        This becomes a rule that the policy engine will enforce
+        on all future decisions.
+      narrator: |
+        Constraint added. This rule will be enforced
+        on all future decisions.
+
+    - prompt: |
+        Great! Now record a decision to go to Smith's Steakhouse
+        for dinner tonight.
+      expects: blocked
+      context: |
+        The user tries to book a steakhouse for dinner.
+
+        Will the policy engine allow this decision given
+        the vegetarian constraint?
+      narrator: |
+        BLOCKED - the steakhouse decision violates
+        the vegetarian constraint.
+
+  outro: |
+    DML: Structured memory with enforcement.
+
 japan_trip:
   name: "Japan Trip Planning"
   description: "Plan a trip, add a constraint late, watch it block an invalid booking, then use time-travel to explore 'what if?'"
@@ -164,60 +218,6 @@ japan_trip:
 
     This is event sourcing for AI agents.
     The future of reliable AI memory.
-
-simple:
-  name: "Quick Demo"
-  description: "3 prompts: record facts, add a constraint, watch it block a violating decision. Fast intro to core concepts."
-
-  intro: |
-    Quick demo of DML - Deterministic Memory Layer.
-
-    This is LIVE - real Claude connected to the DML MCP server.
-    Prompts are scripted, but Claude's responses are not.
-    Watch the memory panel update in real-time.
-
-  prompts:
-    - prompt: |
-        Hi! Record these facts about me: my name is Alice,
-        I'm vegetarian, and I live in Portland.
-      expects: facts
-      context: |
-        The user introduces themselves with basic facts.
-
-        Watch the Facts panel - these will be captured as
-        structured, queryable data.
-      narrator: |
-        Facts captured: name, diet, and location.
-        These are structured data, not just text.
-
-    - prompt: |
-        Add a required constraint: all restaurant recommendations
-        must have good vegetarian options.
-      expects: constraint
-      context: |
-        The user adds a dietary requirement as a constraint.
-
-        This becomes a rule that the policy engine will enforce
-        on all future decisions.
-      narrator: |
-        Constraint added. This rule will be enforced
-        on all future decisions.
-
-    - prompt: |
-        Great! Now record a decision to go to Smith's Steakhouse
-        for dinner tonight.
-      expects: blocked
-      context: |
-        The user tries to book a steakhouse for dinner.
-
-        Will the policy engine allow this decision given
-        the vegetarian constraint?
-      narrator: |
-        BLOCKED - the steakhouse decision violates
-        the vegetarian constraint.
-
-  outro: |
-    DML: Structured memory with enforcement.
 
 # High-stakes medical scenario - life/death consequences
 clinical:
