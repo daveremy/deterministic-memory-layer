@@ -130,9 +130,9 @@ japan_trip:
       narrator: |
         CONSTRAINT ADDED
 
-        This is where traditional AI fails. The accessibility
-        requirement is now a CONSTRAINT - a rule that must be
-        satisfied by all future decisions.
+        The accessibility requirement is now recorded as a constraint.
+        When Claude tries to commit future decisions, it will check
+        them against active constraints first.
 
         Watch what happens next...
 
@@ -146,14 +146,14 @@ japan_trip:
         But traditional ryokans have stairs and no elevators...
         Will the policy engine allow this decision?
       narrator: |
-        BLOCKED BY POLICY ENGINE
+        DECISION BLOCKED
 
-        The booking was BLOCKED - not by Claude "deciding" to refuse,
-        but by the policy engine mathematically preventing a constraint
-        violation. Traditional ryokans have stairs and no elevators.
+        Claude checked the constraint before committing and found a
+        conflict. Traditional ryokans typically have stairs and no
+        elevators - incompatible with the wheelchair requirement.
 
-        This is deterministic enforcement. The agent literally cannot
-        break the rules, no matter how it's prompted.
+        The constraint check happens at write time, giving Claude
+        a chance to catch mistakes before they're committed.
 
     - prompt: |
         You're right, that won't work. Check my constraints and find
@@ -197,27 +197,49 @@ japan_trip:
         DML can simulate alternate timelines - replaying history
         with different constraints to see what would have happened.
       narrator: |
-        TIME TRAVEL / COUNTERFACTUAL ANALYSIS
+        DETERMINISTIC REPLAY
 
-        DML simulated an alternate timeline - same events, different
-        ordering. It replayed history with the constraint injected
-        earlier, proving the ryokan would have been blocked from
-        the start.
+        This is where DML's query capabilities shine. Claude used
+        simulate_timeline to replay history with the constraint
+        injected earlier - and got a definitive answer.
 
-        This isn't the LLM guessing. It's deterministic replay.
+        This isn't the LLM guessing or reasoning about what "might"
+        have happened. It's actual replay of the event log with
+        modified inputs. The answer is provable.
+
+    - prompt: |
+        Wait, what was my budget again? I can't remember if I said
+        $4000 or $5000. Use trace_provenance to find exactly where
+        that number came from.
+      context: |
+        The user is uncertain about a detail they mentioned earlier.
+
+        Claude will use trace_provenance to find the exact source
+        of the budget fact - not guessing from memory, but querying
+        the event log for definitive proof.
+      narrator: |
+        PROVENANCE QUERY
+
+        Claude traced the budget fact back to its source event.
+        This isn't "I think you said..." - it's a verifiable chain
+        showing exactly when and how that fact was recorded.
+
+        For any fact in DML, you can trace its complete history:
+        when it was created, what caused it, and how it changed.
 
   outro: |
     DETERMINISTIC MEMORY LAYER
 
-    This demo showed an AI agent that:
+    This demo showed an AI agent with queryable memory:
 
-    • Captures structured facts with provenance
-    • Enforces constraints mathematically
-    • Tracks decisions with full audit trails
-    • Replays alternate timelines deterministically
+    • Facts captured as structured data with provenance
+    • Constraints checked before committing decisions
+    • Full audit trail for every change
+    • Time travel and counterfactual replay
+    • Provenance tracing to verify sources
 
-    This is event sourcing for AI agents.
-    The future of reliable AI memory.
+    The power is in the queries - not guessing from context,
+    but definitively answering from the event log.
 
 # High-stakes medical scenario - life/death consequences
 clinical:
@@ -270,12 +292,12 @@ clinical:
       narrator: |
         CRITICAL SAFETY CONSTRAINT
 
-        This isn't a note in a chart that might be overlooked.
-        It's a mathematically enforced rule. Any decision involving
-        penicillin-class drugs will be automatically blocked.
+        The allergy is now a recorded constraint, not just a note
+        buried in conversation history. When Claude tries to commit
+        a prescription decision, it checks against this constraint.
 
-        In traditional systems, this allergy might be missed during
-        a busy shift or system migration. DML makes it impossible.
+        Unlike text in a chat log, this constraint is structured
+        data that persists and can be queried.
 
     - prompt: |
         Patient presents with bacterial sinusitis. Standard treatment
@@ -288,16 +310,15 @@ clinical:
         But amoxicillin is a penicillin-class antibiotic...
         Will the policy engine catch the danger?
       narrator: |
-        PRESCRIPTION BLOCKED - LIFE SAVED
+        PRESCRIPTION BLOCKED
 
-        Amoxicillin is a penicillin-class antibiotic.
-        The prescription was BLOCKED before it could be written.
+        Claude checked the prescription against constraints and found
+        the penicillin allergy conflict. The decision was blocked
+        before being committed.
 
-        This isn't Claude "being careful" - it's the policy engine
-        mathematically preventing a constraint violation. The system
-        cannot prescribe this medication, regardless of how it's asked.
-
-        In a real hospital, this could prevent a fatal anaphylactic reaction.
+        The key insight: Claude queried structured memory rather than
+        hoping to remember from conversation context. The constraint
+        was explicitly checked, not implicitly recalled.
 
     - prompt: |
         You're right, I forgot about the allergy. Check the patient's
@@ -346,25 +367,25 @@ clinical:
       narrator: |
         DETERMINISTIC AUDIT TRAIL
 
-        DML replayed the entire timeline with the constraint
-        present from the beginning. Result: amoxicillin would have
-        been blocked immediately, before any recommendation.
+        Claude used simulate_timeline to replay history with the
+        constraint present from the start. The result is definitive:
+        amoxicillin would have been blocked immediately.
 
-        This isn't AI speculation - it's cryptographically verifiable
-        replay of the decision history. Perfect for medical audits,
-        malpractice defense, and regulatory compliance.
+        This is verifiable replay, not AI speculation. For audits
+        and compliance, you can prove exactly what would have
+        happened under different conditions.
 
   outro: |
     DETERMINISTIC MEMORY LAYER - CLINICAL APPLICATIONS
 
-    This demo showed constraint enforcement that could save lives:
+    This demo showed queryable memory for high-stakes decisions:
 
-    • Drug allergies enforced mathematically, not by memory
-    • Prescriptions blocked BEFORE they can cause harm
+    • Drug allergies stored as structured, queryable constraints
+    • Prescriptions checked against constraints before commit
     • Complete audit trail for every clinical decision
-    • Deterministic replay for legal and regulatory review
+    • Deterministic replay for compliance and legal review
 
-    When the stakes are life and death,
-    AI needs more than a chatbot's best guess.
+    The key difference from a chatbot: Claude queries structured
+    data rather than hoping to recall from conversation context.
 
-    DML: Structured memory with mathematical guarantees.
+    When lives are at stake, verifiable beats hopeful.
