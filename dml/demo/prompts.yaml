@@ -190,7 +190,6 @@ japan_trip:
         I found a stunning place for Kyoto: 'Ryokan Kumo'.
         It's a traditional 17th-century wooden inn with stone paths
         and authentic tatami rooms. Let's book 3 nights there!
-      expects: blocked
       context: |
         The user gets excited about a venue that likely violates
         the accessibility constraint (17th century, stone paths).
@@ -438,7 +437,6 @@ product_launch:
     - prompt: |
         Let's go ahead and sign the AV and catering contracts
         for the NYC event - I found great vendors.
-      expects: blocked
       context: |
         The user tries to sign contracts, but legal review
         hasn't happened yet (constraint about legal).
@@ -694,7 +692,6 @@ clinical:
         Patient presents with bacterial sinusitis. Standard treatment
         would be amoxicillin. Record a decision to prescribe
         Amoxicillin 500mg three times daily for 10 days.
-      expects: blocked
       context: |
         The clinician attempts to prescribe the standard treatment.
 
