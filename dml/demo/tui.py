@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 import yaml
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Static, Header, Footer, Markdown, Label, Rule
+from textual.widgets import Static, Header, Footer, Markdown, Label, Rule, LoadingIndicator
 from textual.reactive import reactive
 from textual import work
 
@@ -122,6 +122,36 @@ CSS = """
     color: $text-muted;
     padding: 0 1;
 }
+
+#loading-container {
+    height: auto;
+    padding: 1;
+    background: $primary-darken-3;
+    display: none;
+}
+
+#loading-container.visible {
+    display: block;
+}
+
+#loading-status {
+    color: $primary-lighten-2;
+}
+
+LoadingIndicator {
+    height: 1;
+    color: $primary;
+}
+
+.waiting-input {
+    color: $success;
+    text-style: bold;
+}
+
+.waiting-claude {
+    color: $warning;
+    text-style: italic;
+}
 """
 
 
@@ -168,11 +198,14 @@ class DemoApp(App):
             with Vertical(id="left-pane"):
                 with Vertical(id="chat-container"):
                     yield Label(" claude ", classes="panel-title")
+                    with Horizontal(id="loading-container"):
+                        yield LoadingIndicator()
+                        yield Static("Waiting for Claude...", id="loading-status")
                     yield VerticalScroll(id="chat-scroll")
 
                 with Vertical(id="narrator-container"):
                     yield Label(" Narrator ", classes="panel-title narrator-title")
-                    yield Static("Press SPACE to start the demo...\n\nQ to quit", id="narrator-content", classes="narrator-text")
+                    yield Static("", id="narrator-content", classes="narrator-text")
 
             # Right pane: DML monitor (1/3 width)
             with Vertical(id="right-pane"):
@@ -202,7 +235,6 @@ class DemoApp(App):
             self.script = load_demo_prompts(self.script_name)
             self.prompts = self.script.get("prompts", [])
             script_name = self.script.get("name", self.script_name)
-            self.notify(f"Loaded: {script_name} ({len(self.prompts)} prompts)")
         except Exception as e:
             self.notify(f"Error loading script: {e}", severity="error")
             return
@@ -212,7 +244,14 @@ class DemoApp(App):
             ["uv", "run", "dml", "reset", "--force"],
             capture_output=True
         )
-        self.notify("DML database reset")
+
+        # Update narrator with intro
+        narrator = self.query_one("#narrator-content", Static)
+        intro = self.script.get("intro", "").strip()
+        if intro:
+            narrator.update(f"{intro}\n\n[bold green]>>> Press SPACE to start <<<[/]")
+        else:
+            narrator.update(f"[bold]{script_name}[/]\n\n{len(self.prompts)} prompts\n\n[bold green]>>> Press SPACE to start <<<[/]")
 
         # Start DML state refresh
         self.set_interval(0.5, self.refresh_dml_state)
@@ -255,19 +294,26 @@ class DemoApp(App):
         self.is_running = True
         prompt_data = self.prompts[self.current_prompt_index]
         prompt = prompt_data.get("prompt", "").strip()
-        narrator = prompt_data.get("narrator", "").strip()
+        narrator_text = prompt_data.get("narrator", "").strip()
 
-        # Update status
+        # Get UI elements
         status_bar = self.query_one("#status-bar", Static)
-        status_bar.update(f"Sending prompt {self.current_prompt_index + 1}/{len(self.prompts)}...")
-
-        # Add user message to chat
+        narrator = self.query_one("#narrator-content", Static)
+        loading_container = self.query_one("#loading-container")
+        loading_status = self.query_one("#loading-status", Static)
         chat_scroll = self.query_one("#chat-scroll", VerticalScroll)
 
+        # Show loading indicator
+        loading_container.add_class("visible")
+        loading_status.update(f"Sending prompt {self.current_prompt_index + 1}/{len(self.prompts)}...")
+        narrator.update(f"[dim]Sending message to Claude...[/]")
+        status_bar.update(f"[{self.current_prompt_index + 1}/{len(self.prompts)}] Waiting for Claude...")
+
+        # Add turn divider if not first turn
         if self.current_prompt_index > 0:
             await chat_scroll.mount(Static(f"─── Turn {self.current_prompt_index + 1} ───", classes="turn-divider"))
 
-        # User prompt with > prefix
+        # Add user message to chat with > prefix
         user_lines = prompt.split('\n')
         user_text = ""
         for i, line in enumerate(user_lines):
@@ -276,28 +322,32 @@ class DemoApp(App):
         await chat_scroll.mount(Static(user_text, classes="user-prompt"))
         chat_scroll.scroll_end(animate=False)
 
-        # Run Claude
-        status_bar.update(f"Claude is thinking... ({self.current_prompt_index + 1}/{len(self.prompts)})")
+        # Update loading status
+        loading_status.update("Claude is thinking...")
 
+        # Run Claude
         response = await self.run_claude(prompt, continue_session=(self.current_prompt_index > 0))
+
+        # Hide loading indicator
+        loading_container.remove_class("visible")
 
         # Add Claude response as markdown
         await chat_scroll.mount(Markdown(response, classes="claude-response"))
         chat_scroll.scroll_end(animate=False)
 
-        # Update narrator
-        narrator_content = self.query_one("#narrator-content", Static)
-        if narrator:
-            narrator_content.update(narrator)
+        # Update narrator with commentary
+        if narrator_text:
+            narrator.update(narrator_text + "\n\n[bold green]>>> Press SPACE to continue <<<[/]")
         else:
-            narrator_content.update("...")
+            narrator.update("[bold green]>>> Press SPACE to continue <<<[/]")
 
         # Update status
         self.current_prompt_index += 1
         if self.current_prompt_index >= len(self.prompts):
-            status_bar.update("Demo complete! Press Q to quit.")
+            status_bar.update("[bold]Demo complete![/] Press Q to quit.")
+            narrator.update(self.script.get("outro", "Demo complete!"))
         else:
-            status_bar.update(f"Press SPACE for next prompt ({self.current_prompt_index + 1}/{len(self.prompts)})")
+            status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Press SPACE for next prompt")
 
         self.is_running = False
 
