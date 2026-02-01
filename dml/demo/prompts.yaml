@@ -6,57 +6,105 @@
 
 simple:
   name: "Quick Demo"
-  description: "3 prompts: record facts, add a constraint, watch it block a violating decision. Fast intro to core concepts."
+  description: "Natural conversation showing fact updates, provenance queries, and constraint checking."
 
   intro: |
     Quick demo of DML - Deterministic Memory Layer.
 
     This is LIVE - real Claude connected to the DML MCP server.
     Prompts are scripted, but Claude's responses are not.
-    Watch the memory panel update in real-time.
+
+    Notice: The user never mentions DML. They're just having a
+    conversation. Claude uses DML behind the scenes to maintain
+    structured, queryable memory.
 
   prompts:
     - prompt: |
-        Hi! My name is Alice, I'm vegetarian, and I live in Portland.
+        Hi! I'm planning a dinner party this Saturday. Thinking
+        around 6 guests.
       expects: facts
       context: |
-        The user introduces themselves naturally.
+        The user starts planning naturally.
 
-        Watch the Facts panel - Claude recognizes these as facts
-        worth capturing as structured, queryable data.
+        Watch the Facts panel - Claude captures these details
+        as structured data without being asked.
       narrator: |
-        Facts captured: name, diet, and location.
-        Claude recognized these as structured data worth storing,
-        not just conversation to forget.
+        Claude captured the event details as structured facts.
+        The user didn't ask for this - Claude recognized these
+        as important data worth tracking.
 
     - prompt: |
-        Add a required constraint: never recommend steakhouses
-        or meat-focused restaurants.
+        Actually, my friend Sarah is bringing her partner now,
+        so make that 8 people total.
+      expects: facts
+      context: |
+        The user updates a fact they mentioned earlier.
+
+        Watch the Facts panel - the guest count should update.
+        DML tracks this as a change with full history.
+      narrator: |
+        FACT UPDATED
+
+        The guest count changed from 6 to 8. DML doesn't just
+        overwrite - it keeps the full history of changes.
+        You can trace back to see what changed and when.
+
+    - prompt: |
+        Oh important - Sarah is gluten-free. Really important
+        we don't forget that for the menu.
       expects: constraint
       context: |
-        The user adds a dietary restriction as a constraint.
+        The user mentions a dietary requirement naturally.
 
-        This becomes a rule that the policy engine will enforce
-        on all future decisions.
+        Claude should recognize this as a constraint worth
+        tracking - not just a fact, but a rule to remember.
       narrator: |
-        Constraint added. This rule will be enforced
-        on all future decisions.
+        Claude recognized this as a constraint, not just a fact.
+        Dietary restrictions are rules that affect future decisions,
+        so they're stored differently than regular facts.
 
     - prompt: |
-        Great! Now record a decision to go to Smith's Steakhouse
-        for dinner tonight.
+        Wait, how many guests was it again? I feel like I've
+        changed my mind a few times.
+      context: |
+        The user is uncertain about something they said earlier.
+
+        Claude can use DML's query capabilities to show the
+        history of changes, not just the current value.
+      narrator: |
+        PROVENANCE QUERY
+
+        Claude didn't just say "8 guests" - it showed the history:
+        originally 6, then updated to 8 when Sarah's partner joined.
+        This is queryable memory, not fuzzy recall.
+
+    - prompt: |
+        Let's just order a bunch of pizzas for everyone. Easy!
       expects: blocked
       context: |
-        The user tries to book a steakhouse for dinner.
+        The user suggests a menu option.
 
-        Will the policy engine block this decision given
-        the "never recommend steakhouses" constraint?
+        But wait - Sarah is gluten-free. Standard pizza won't work.
+        Will Claude catch this before committing to the plan?
       narrator: |
-        BLOCKED - the steakhouse decision violates
-        the constraint.
+        Claude checked the suggestion against Sarah's dietary
+        constraint before agreeing. Regular pizza and gluten-free
+        don't mix - the decision was flagged.
+
+        The user never said "check constraints" - Claude did this
+        automatically because DML tracks these relationships.
 
   outro: |
-    DML: Structured memory with enforcement.
+    DML: Invisible but powerful.
+
+    The user never mentioned DML, yet Claude:
+    • Captured facts automatically
+    • Tracked changes with history
+    • Recognized constraints from natural language
+    • Queried provenance when asked
+    • Checked constraints before agreeing
+
+    Structured memory that stays out of the way.
 
 japan_trip:
   name: "Japan Trip Planning"
