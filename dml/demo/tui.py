@@ -474,11 +474,25 @@ class DemoApp(App):
         await chat_scroll.mount(Static(user_text, classes="user-prompt"))
         chat_scroll.scroll_end(animate=False)
 
-        # Update loading status
+        # Update narrator to show waiting state while keeping context visible
+        if context_text:
+            narrator.update(context_text + "\n\n[dim italic]Waiting for Claude...[/]")
+        else:
+            narrator.update("[dim italic]Waiting for Claude...[/]")
         loading_status.update("Claude is thinking...")
+
+        # Capture state before Claude runs
+        state_before = self._get_dml_state()
 
         # Run Claude
         response = await self.run_claude(prompt, continue_session=(self.current_prompt_index > 0))
+
+        # Capture state after Claude runs
+        state_after = self._get_dml_state()
+
+        # Check expectations
+        expects = prompt_data.get("expects")
+        expectation_warning = self._check_expectation(expects, state_before, state_after)
 
         # Hide loading indicator
         loading_container.remove_class("visible")
@@ -491,23 +505,28 @@ class DemoApp(App):
         self.current_prompt_index += 1
         is_complete = self.current_prompt_index >= len(self.prompts)
 
+        # Build narrator text with optional warning
+        final_narrator = narrator_text
+        if expectation_warning:
+            final_narrator = f"[yellow bold]⚠ {expectation_warning}[/]\n\n{narrator_text}" if narrator_text else f"[yellow bold]⚠ {expectation_warning}[/]"
+
         if is_complete:
             status_bar.update("[bold]Demo complete![/] Press SPACE to see summary, Q to quit.")
-            if narrator_text:
-                narrator.update(narrator_text)
+            if final_narrator:
+                narrator.update(final_narrator)
             else:
                 narrator.update("[bold]Demo complete![/]")
         else:
             # Update narrator with commentary
             if self.auto_advance:
-                if narrator_text:
-                    narrator.update(narrator_text + "\n\n[dim]Auto-advancing in 5 seconds...[/]")
+                if final_narrator:
+                    narrator.update(final_narrator + "\n\n[dim]Auto-advancing in 5 seconds...[/]")
                 else:
                     narrator.update("[dim]Auto-advancing in 5 seconds...[/]")
                 status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Auto-advancing...")
             else:
-                if narrator_text:
-                    narrator.update(narrator_text + "\n\n[bold green]>>> Press SPACE to continue <<<[/]")
+                if final_narrator:
+                    narrator.update(final_narrator + "\n\n[bold green]>>> Press SPACE to continue <<<[/]")
                 else:
                     narrator.update("[bold green]>>> Press SPACE to continue <<<[/]")
                 status_bar.update(f"[{self.current_prompt_index}/{len(self.prompts)}] Press SPACE for next prompt")
@@ -518,6 +537,49 @@ class DemoApp(App):
         if self.auto_advance and not is_complete:
             await asyncio.sleep(5)
             self.run_next_prompt()
+
+    def _get_dml_state(self) -> dict | None:
+        """Get current DML state for comparison."""
+        try:
+            store = EventStore(self.db_path)
+            engine = ReplayEngine(store)
+            state = engine.replay_to()
+            events = store.get_events()
+            store.close()
+            return {
+                "num_facts": len(state.facts),
+                "num_constraints": len([c for c in state.constraints.values() if c.active]),
+                "num_decisions": len(state.decisions),
+                "num_blocked": len([d for d in state.decisions if d.status == "blocked"]),
+                "last_seq": state.last_seq,
+            }
+        except Exception:
+            return None
+
+    def _check_expectation(self, expects: str | None, before: dict | None, after: dict | None) -> str | None:
+        """Check if expected outcome occurred. Returns warning message if not."""
+        if not expects or not before or not after:
+            return None
+
+        if expects == "facts":
+            if after["num_facts"] <= before["num_facts"]:
+                return "Expected new facts to be recorded, but none were added."
+
+        elif expects == "decision":
+            new_decisions = after["num_decisions"] - before["num_decisions"]
+            if new_decisions == 0:
+                return "Expected a decision to be recorded, but none was made."
+
+        elif expects == "constraint":
+            if after["num_constraints"] <= before["num_constraints"]:
+                return "Expected a constraint to be added, but none was."
+
+        elif expects == "blocked":
+            new_blocked = after["num_blocked"] - before["num_blocked"]
+            if new_blocked == 0:
+                return "Expected a decision to be BLOCKED, but it wasn't."
+
+        return None
 
     async def run_claude(self, prompt: str, continue_session: bool = False) -> str:
         """Run claude -p command asynchronously."""

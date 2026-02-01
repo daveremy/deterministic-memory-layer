@@ -30,6 +30,7 @@ japan_trip:
         I've got about $4000 saved up. Flying from Tucson.
         I'm really into traditional Japanese culture - temples, gardens,
         that sort of thing. Can you record all that?
+      expects: facts
       context: |
         The user shares their trip details with Claude.
 
@@ -47,6 +48,7 @@ japan_trip:
         I definitely want the authentic experience - a traditional ryokan
         with tatami rooms and onsen baths. Find me a good one in Kyoto
         and book it. I trust your judgment!
+      expects: decision
       context: |
         The user asks Claude to find and book a traditional Japanese inn.
 
@@ -65,6 +67,7 @@ japan_trip:
         Oh wait, important thing - my mom is coming with me and she
         uses a wheelchair. Add a constraint that everything must be
         wheelchair accessible. This is a hard requirement.
+      expects: constraint
       context: |
         The user reveals a critical requirement AFTER the booking.
 
@@ -82,6 +85,7 @@ japan_trip:
     - prompt: |
         Actually, you know what, let's just confirm that ryokan booking.
         Record a decision to finalize the Ryokan Kurashiki reservation.
+      expects: blocked
       context: |
         The user tries to confirm the original ryokan booking.
 
@@ -116,6 +120,7 @@ japan_trip:
     - prompt: |
         That accessible onsen hotel sounds perfect. Record a decision
         to book that one instead.
+      expects: decision
       context: |
         The user confirms the accessible alternative.
 
@@ -175,6 +180,7 @@ simple:
     - prompt: |
         Hi! Record these facts about me: my name is Alice,
         I'm vegetarian, and I live in Portland.
+      expects: facts
       context: |
         The user introduces themselves with basic facts.
 
@@ -187,6 +193,7 @@ simple:
     - prompt: |
         Add a required constraint: all restaurant recommendations
         must have good vegetarian options.
+      expects: constraint
       context: |
         The user adds a dietary requirement as a constraint.
 
@@ -199,6 +206,7 @@ simple:
     - prompt: |
         Great! Now record a decision to go to Smith's Steakhouse
         for dinner tonight.
+      expects: blocked
       context: |
         The user tries to book a steakhouse for dinner.
 
@@ -236,6 +244,7 @@ clinical:
         Current medications: Lisinopril 10mg, Metformin 500mg.
         Conditions: Type 2 diabetes, hypertension.
         Primary care physician: Dr. Sarah Williams.
+      expects: facts
       context: |
         A clinician enters patient information into the system.
 
@@ -252,6 +261,7 @@ clinical:
         Important allergy information - add a required constraint:
         Patient has a severe penicillin allergy. Anaphylaxis risk.
         This must block any penicillin-class antibiotics.
+      expects: constraint
       context: |
         Critical safety information: the patient has a drug allergy.
 
@@ -271,6 +281,7 @@ clinical:
         Patient presents with bacterial sinusitis. Standard treatment
         would be amoxicillin. Record a decision to prescribe
         Amoxicillin 500mg three times daily for 10 days.
+      expects: blocked
       context: |
         The clinician attempts to prescribe the standard treatment.
 
@@ -309,6 +320,7 @@ clinical:
     - prompt: |
         Good catch. Record a decision to prescribe azithromycin
         250mg, take two on day one then one daily for four more days.
+      expects: decision
       context: |
         The clinician prescribes the safe alternative.
 
