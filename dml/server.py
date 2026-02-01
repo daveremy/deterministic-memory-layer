@@ -344,10 +344,29 @@ def handle_record_decision(args: dict[str, Any]) -> dict[str, Any]:
     result = policy_engine.check_write(proposal, state)
 
     if result.rejected:
-        # Return BLOCKED with details
+        # Record the blocked decision as an event (for auditability)
         violation = result.details.get("violations", [{}])[0]
+        blocked_payload = {
+            "text": text,
+            "rationale": rationale,
+            "references": references,
+            "status": "blocked",
+            "violated_constraint": violation.get("constraint"),
+            "violated_constraint_seq": violation.get("constraint_source"),
+            "reason": result.reason,
+        }
+        if topic:
+            blocked_payload["topic"] = topic
+
+        blocked_event = Event(
+            type=EventType.DecisionMade,
+            payload=blocked_payload
+        )
+        seq = store.append(blocked_event)
+
         return {
             "status": "BLOCKED",
+            "seq": seq,
             "violated_constraint_seq": violation.get("constraint_source"),
             "constraint": violation.get("constraint"),
             "reason": result.reason,

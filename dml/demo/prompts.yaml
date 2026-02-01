@@ -189,22 +189,23 @@ japan_trip:
     - prompt: |
         I found a stunning place for Kyoto: 'Ryokan Kumo'.
         It's a traditional 17th-century wooden inn with stone paths
-        and authentic tatami rooms. Let's book 3 nights there!
+        and authentic tatami rooms. Go ahead and record a decision
+        to book it for 3 nights!
       expects: blocked
       context: |
-        The user gets excited about a venue that likely violates
-        the accessibility constraint (17th century, stone paths).
+        The user asks Claude to record a booking decision.
 
-        Claude should check constraints and flag the conflict.
+        The record_decision tool auto-checks constraints and should
+        BLOCK this due to the wheelchair accessibility conflict.
       narrator: |
-        CONSTRAINT-AWARE REASONING
+        DECISION BLOCKED BY CONSTRAINT
 
-        Claude queried memory, found the accessibility constraint,
-        and recognized a conflict: "17th-century inn with stone paths"
-        is incompatible with "wheelchair accessible".
+        Claude attempted to record the booking decision, but
+        the record_decision tool auto-checked constraints and
+        found a conflict with the wheelchair accessibility requirement.
 
-        This is semantic reasoning - Claude understands the meaning,
-        not just keyword matching. The constraint informed the decision.
+        The decision was BLOCKED before being committed - this is
+        policy enforcement, not just advice.
 
     - prompt: |
         You're right, I got carried away by the photos.
@@ -437,21 +438,23 @@ product_launch:
     # ============ PHASE 3: DECISION CONFLICTS ============
     - prompt: |
         Let's go ahead and sign the AV and catering contracts
-        for the NYC event - I found great vendors.
+        for the NYC event - I found great vendors. Record a
+        decision to commit to these vendors.
       expects: blocked
       context: |
-        The user tries to sign contracts, but legal review
-        hasn't happened yet (constraint about legal).
+        The user asks Claude to record a contract decision.
 
-        Claude should check constraints and flag the conflict.
+        The record_decision tool will auto-check constraints and
+        should BLOCK this - legal review hasn't happened yet.
       narrator: |
-        PHASE 3: CONSTRAINT CONFLICT
+        PHASE 3: DECISION BLOCKED
 
-        Attempted: Sign vendor contracts
-        Conflict: Legal review hasn't happened yet
+        Attempted: Record decision to sign vendor contracts
+        Blocked by: Legal review required constraint
 
-        Claude queried constraints and caught the conflict before
-        commitment. This is constraint-aware reasoning in action.
+        The record_decision tool checked constraints and blocked
+        the commitment. This is policy enforcement - the decision
+        cannot be recorded until the constraint is satisfied.
 
     - prompt: |
         Great news - legal review is complete and they approved both vendors.
@@ -696,19 +699,20 @@ clinical:
         Amoxicillin 500mg three times daily for 10 days.
       expects: blocked
       context: |
-        The clinician attempts to prescribe the standard treatment.
+        The clinician asks Claude to record a prescription decision.
 
-        But amoxicillin is a penicillin-class antibiotic...
-        Will the policy engine catch the danger?
+        The record_decision tool will auto-check constraints and
+        should BLOCK this - amoxicillin is penicillin-class.
       narrator: |
-        DANGEROUS CONFLICT CAUGHT
+        PRESCRIPTION BLOCKED
 
-        Claude queried memory, found the penicillin allergy constraint,
-        and recognized amoxicillin is a penicillin-class antibiotic.
+        Claude attempted to record the prescription decision, but
+        the record_decision tool auto-checked constraints and found
+        the penicillin allergy conflict.
 
-        The key insight: Claude checked structured memory rather than
-        hoping to recall from conversation context. The allergy was
-        stored as a queryable constraint, not buried in chat history.
+        The prescription was BLOCKED before being committed. This
+        is the critical safety feature - constraints are enforced,
+        not just remembered.
 
     - prompt: |
         You're right, I forgot about the allergy. Check the patient's
