@@ -137,7 +137,7 @@ simple:
 
 japan_trip:
   name: "Japan Trip Planning"
-  description: "Plan a trip with accessibility needs. Shows constraint checking, explainability, and counterfactual analysis."
+  description: "Plan a trip with accessibility needs. Shows constraint-aware reasoning, explainability, and counterfactual analysis."
 
   intro: |
     SCENARIO: Planning a trip to Japan with accessibility needs
@@ -145,11 +145,11 @@ japan_trip:
     You're planning a trip to Japan with your elderly mother.
     Because she uses a wheelchair, accessibility is a hard constraint.
 
-    Watch how DML handles:
-    • Capturing trip details and constraints naturally
-    • Blocking decisions that violate constraints
+    Watch how DML (an MCP server with event-driven memory) handles:
+    • Capturing trip details and constraints as immutable events
+    • Constraint-aware reasoning that catches conflicts
     • Explaining the full reasoning chain behind decisions
-    • Using simulation to explore "what if" scenarios
+    • Counterfactual analysis: "what if this constraint didn't exist?"
 
   prompts:
     - prompt: |
@@ -197,14 +197,14 @@ japan_trip:
 
         Claude should check constraints and flag the conflict.
       narrator: |
-        DECISION BLOCKED
+        CONSTRAINT-AWARE REASONING
 
-        Claude checked the proposed booking against constraints and
-        found a conflict: "Traditional 17th-century inn" + "Stone paths"
-        is incompatible with "Wheelchair accessible".
+        Claude queried memory, found the accessibility constraint,
+        and recognized a conflict: "17th-century inn with stone paths"
+        is incompatible with "wheelchair accessible".
 
-        The agent recognized the safety constraint and refused to
-        commit a decision that would violate it.
+        This is semantic reasoning - Claude understands the meaning,
+        not just keyword matching. The constraint informed the decision.
 
     - prompt: |
         You're right, I got carried away by the photos.
@@ -217,11 +217,13 @@ japan_trip:
         Since this satisfies the constraints, the decision should
         be committed successfully.
       narrator: |
-        VALID DECISION COMMITTED
+        DECISION RECORDED
 
-        This booking adheres to the active constraints. The decision
-        is now immutable history. DML ensures that the final
-        itinerary is safe and compliant.
+        Claude checked constraints, found no conflicts with "modern,
+        elevators, accessible rooms", and recorded the decision.
+
+        The decision is now an immutable event in the log - we can
+        always trace back to when and why this choice was made.
 
     - prompt: |
         My sister is asking why we're not staying at a traditional
@@ -255,45 +257,45 @@ japan_trip:
       narrator: |
         COUNTERFACTUAL ANALYSIS
 
-        Claude forks the history, removes the "wheelchair" constraint,
-        and replays the "Book Ryokan" attempt.
-        The answer is definitive: "Yes, it would have been approved."
+        Claude used simulate_timeline to answer "what if?"
+        By replaying history without the wheelchair constraint,
+        we get a definitive answer: the Ryokan would have been fine.
 
         This proves the constraint was the deciding factor - not
         budget, not availability, specifically the accessibility need.
+        Event-driven memory makes counterfactuals deterministic.
 
   outro: |
-    DML: EXPLAINABLE AI MEMORY
+    DML: EVENT-DRIVEN MEMORY FOR EXPLAINABLE AI
 
     This demo showed AI with accountable decision-making:
-    • Constraints enforced proactively, not forgotten
+    • Constraints stored as events, checked before decisions
     • Full reasoning chain available on demand
-    • "What if" analysis with definitive answers
+    • Counterfactual analysis with deterministic answers
 
     When someone asks "why did you choose that?" -
-    you can show them exactly why, step by step.
+    you can trace the events and show them exactly why.
 
 # Rich multi-phase scenario showing DML's full power
 product_launch:
   name: "Product Launch (Advanced)"
-  description: "A startup plans a product launch with evolving budget, dates, and constraints. Shows drift detection, cascading conflicts, and counterfactual analysis."
+  description: "A startup plans a product launch with evolving requirements. Shows fact history, constraint interactions, and drift analysis."
 
   intro: |
-    SCENARIO: Product Launch + Event Tour
+    SCENARIO: Product Launch + Event Tour (Advanced Demo)
 
     You're planning a Q2 product launch for a startup, including
-    a flagship event in NYC and a 3-city tour (NYC, Austin, SF).
+    a flagship event in NYC and a 3-city tour.
 
-    Things will change: budget gets cut, dates shift, sponsorship
-    falls through, and constraints start conflicting with decisions.
+    Plans will evolve: budget gets cut, dates shift, sponsorship
+    changes, and constraints interact with decisions.
 
-    This demo showcases DML's full power:
-    • Facts that change multiple times (with history)
+    This longer demo showcases DML's event-driven architecture:
+    • Facts that change multiple times (full history preserved)
     • Multiple interacting constraints
-    • Decisions that cascade and conflict
-    • Drift detection ("how much has the plan changed?")
-    • Proactive conflict alerts
-    • Counterfactual "what if" analysis
+    • Drift analysis ("how much has the plan changed?")
+    • Provenance traces ("where did this number come from?")
+    • Counterfactual analysis ("what if sponsorship was higher?")
 
   prompts:
     # ============ PHASE 1: INITIALIZE ============
@@ -315,14 +317,15 @@ product_launch:
       narrator: |
         PHASE 1: INITIALIZATION
 
-        Multiple facts captured from natural conversation:
+        Multiple facts captured as immutable events:
         • Launch date: June 10
         • Budget: $120,000
         • Cities: NYC, Austin, SF
         • Expected attendees: 300
         • CEO availability: June 8-12
 
-        Each fact has a timestamp and can be traced back to this moment.
+        Each fact has a sequence number - we can trace any value
+        back to the exact moment it was recorded.
 
     - prompt: |
         Some constraints we need to follow: The launch absolutely
@@ -442,13 +445,13 @@ product_launch:
 
         Claude should check constraints and flag the conflict.
       narrator: |
-        PHASE 3: DECISION BLOCKED
+        PHASE 3: CONSTRAINT CONFLICT
 
         Attempted: Sign vendor contracts
-        Blocked by: Legal review required constraint
+        Conflict: Legal review hasn't happened yet
 
-        Claude caught the constraint violation before
-        the commitment was made. This is proactive protection.
+        Claude queried constraints and caught the conflict before
+        commitment. This is constraint-aware reasoning in action.
 
     - prompt: |
         Great news - legal review is complete and they approved both vendors.
@@ -610,44 +613,42 @@ product_launch:
         Every step is traceable. Every decision is auditable.
 
   outro: |
-    DML: ENTERPRISE-GRADE AI MEMORY
+    DML: EVENT-DRIVEN MEMORY FOR COMPLEX PLANNING
 
     This demo showed sophisticated memory management:
 
-    • Multiple facts changed over time (with full history)
-    • Interacting constraints created cascading effects
-    • Decisions were blocked when they violated rules
-    • Drift was quantified across multiple dimensions
-    • Provenance traced any fact back to its source
-    • Counterfactual analysis explored "what if" scenarios
-    • Full explainability answered "how did we get here?"
+    • Facts changed over time - full history preserved as events
+    • Constraints checked before every decision
+    • Drift quantified: "how far have we drifted from the plan?"
+    • Provenance traced: "where did this number come from?"
+    • Counterfactuals answered: "what if sponsorship was higher?"
 
-    This isn't a chatbot remembering context.
-    This is an AI with auditable, queryable, deterministic memory.
+    This isn't a chatbot trying to remember context.
+    This is structured, auditable, event-driven memory.
 
-    When the stakes are high, you need memory you can trust.
+    When plans evolve, you need memory that tracks the journey.
 
 # High-stakes medical scenario - life/death consequences
 clinical:
   name: "Clinical Decision Support"
-  description: "High-stakes medical scenario: a drug allergy constraint blocks a dangerous prescription. Shows how DML can save lives."
+  description: "High-stakes medical scenario: a drug allergy constraint prevents a dangerous prescription."
 
   intro: |
-    SCENARIO: Clinical decision support
+    SCENARIO: Clinical Decision Support
 
     You're a clinician entering patient information into an
     AI-assisted medication management system. The patient has
-    a severe drug allergy recorded in their chart.
+    a severe drug allergy that must never be forgotten.
 
-    Later, you'll attempt to prescribe the standard treatment
+    Later, you'll attempt to prescribe standard treatment
     for an infection - but it conflicts with the allergy.
 
-    Watch how DML handles:
-    • Recording patient facts as structured medical data
-    • Capturing drug allergies as safety constraints
-    • Blocking dangerous prescriptions before they're committed
-    • Providing safe alternatives with full audit trail
-    • Verifying decisions with counterfactual replay
+    Watch how DML's event-driven memory handles:
+    • Patient facts stored as structured, queryable events
+    • Drug allergies recorded as safety constraints
+    • Constraint-aware reasoning that catches dangerous conflicts
+    • Safe alternatives with full audit trail
+    • Counterfactual verification for compliance
 
   prompts:
     - prompt: |
@@ -700,15 +701,14 @@ clinical:
         But amoxicillin is a penicillin-class antibiotic...
         Will the policy engine catch the danger?
       narrator: |
-        PRESCRIPTION BLOCKED
+        DANGEROUS CONFLICT CAUGHT
 
-        Claude checked the prescription against constraints and found
-        the penicillin allergy conflict. The decision was blocked
-        before being committed.
+        Claude queried memory, found the penicillin allergy constraint,
+        and recognized amoxicillin is a penicillin-class antibiotic.
 
-        The key insight: Claude queried structured memory rather than
-        hoping to remember from conversation context. The constraint
-        was explicitly checked, not implicitly recalled.
+        The key insight: Claude checked structured memory rather than
+        hoping to recall from conversation context. The allergy was
+        stored as a queryable constraint, not buried in chat history.
 
     - prompt: |
         You're right, I forgot about the allergy. Check the patient's
@@ -766,16 +766,16 @@ clinical:
         happened under different conditions.
 
   outro: |
-    DETERMINISTIC MEMORY LAYER - CLINICAL APPLICATIONS
+    DML: EVENT-DRIVEN MEMORY FOR HIGH-STAKES DECISIONS
 
-    This demo showed queryable memory for high-stakes decisions:
+    This demo showed queryable memory for critical scenarios:
 
     • Drug allergies stored as structured, queryable constraints
-    • Prescriptions checked against constraints before commit
-    • Complete audit trail for every clinical decision
-    • Deterministic replay for compliance and legal review
+    • Claude checks constraints before committing decisions
+    • Complete audit trail - every event has provenance
+    • Counterfactual replay for compliance verification
 
-    The key difference from a chatbot: Claude queries structured
-    data rather than hoping to recall from conversation context.
+    The key difference: Claude queries structured event data
+    rather than hoping to recall from conversation context.
 
     When lives are at stake, verifiable beats hopeful.
