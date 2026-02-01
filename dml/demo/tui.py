@@ -172,7 +172,7 @@ class DemoApp(App):
 
                 with Vertical(id="narrator-container"):
                     yield Label(" Narrator ", classes="panel-title narrator-title")
-                    yield Static("Watching the conversation...", id="narrator-content", classes="narrator-text")
+                    yield Static("Press SPACE to start the demo...\n\nQ to quit", id="narrator-content", classes="narrator-text")
 
             # Right pane: DML monitor (1/3 width)
             with Vertical(id="right-pane"):
@@ -201,6 +201,8 @@ class DemoApp(App):
         try:
             self.script = load_demo_prompts(self.script_name)
             self.prompts = self.script.get("prompts", [])
+            script_name = self.script.get("name", self.script_name)
+            self.notify(f"Loaded: {script_name} ({len(self.prompts)} prompts)")
         except Exception as e:
             self.notify(f"Error loading script: {e}", severity="error")
             return
@@ -210,6 +212,7 @@ class DemoApp(App):
             ["uv", "run", "dml", "reset", "--force"],
             capture_output=True
         )
+        self.notify("DML database reset")
 
         # Start DML state refresh
         self.set_interval(0.5, self.refresh_dml_state)
