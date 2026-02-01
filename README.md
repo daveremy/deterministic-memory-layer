@@ -30,11 +30,17 @@
 
 ## Demo
 
-Watch DML in action with a live Claude session:
+Watch DML in action with live Claude sessions:
 
+### Quick Demo: Dinner Party Planning
 [![asciicast](https://asciinema.org/a/poksmLtZA784MzjQ.svg)](https://asciinema.org/a/poksmLtZA784MzjQ)
 
-*Claude captures facts, tracks changes, and checks constraints in real-time as users describe a dinner party scenario.*
+Facts captured from natural conversation, fact updates with history preserved, constraints from casual mentions, and provenance queries showing change history.
+
+### Japan Trip: Accessibility Constraints
+[![asciicast](https://asciinema.org/a/bjXwcMZumtnlBw5J.svg)](https://asciinema.org/a/bjXwcMZumtnlBw5J)
+
+Constraint-aware reasoning catches a conflict between a traditional ryokan booking and wheelchair accessibility requirements. Shows explainability and counterfactual analysis.
 
 ---
 
