@@ -604,13 +604,16 @@ class DemoApp(App):
         except Exception:
             return
 
-        # Update Facts - show key: value with wrapping
+        # Update Facts - show key: value, with previous value if changed
         facts_content = self.query_one("#facts-content", Static)
         if state.facts:
             lines = []
             for key, fact in list(state.facts.items())[:8]:
                 lines.append(f"[bold cyan]{key}[/]")
-                lines.append(f"  {fact.value}")
+                if fact.previous_value is not None:
+                    lines.append(f"  {fact.value} [dim](was: {fact.previous_value})[/]")
+                else:
+                    lines.append(f"  {fact.value}")
             facts_content.update("\n".join(lines))
         else:
             facts_content.update("[dim]No facts recorded yet[/]")
