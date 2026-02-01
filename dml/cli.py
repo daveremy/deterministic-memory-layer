@@ -388,10 +388,15 @@ You have DML MCP tools available. Use them to track facts, constraints, and deci
 ## When to Record
 
 **Record facts** for raw information:
-- Amounts, budgets, prices
+- Amounts, budgets, prices, counts
 - Places, destinations, locations
 - Attributes (wheelchair type, dietary needs)
 - Preferences as data points
+
+**Update facts** when values change:
+- "Actually, make that 8 people" → update guest_count fact
+- "My budget changed to $3000" → update budget fact
+- Any correction or change to previously recorded data
 
 **Record constraints** for rules:
 - "must have", "need", "require" → required constraint
@@ -409,18 +414,25 @@ You have DML MCP tools available. Use them to track facts, constraints, and deci
 User: "My budget is $5000"
 → add_fact(key="budget", value="5000")
 
+User: "Actually, my budget is only $3000 now"
+→ add_fact(key="budget", value="3000")  # Updates existing fact
+
+User: "Planning for 6 guests"
+→ add_fact(key="guest_count", value="6")
+
+User: "Two more people are coming, so 8 total"
+→ add_fact(key="guest_count", value="8")  # Updates existing fact
+
 User: "I need wheelchair accessible places"
 → add_constraint(text="wheelchair accessible required", priority="required")
 
 User: "Let's do April 12-19"
 → record_decision(text="Travel dates: April 12-19, 2026", rationale="User confirmed dates", topic="dates")
 
-You: "I recommend Hotel Accessible Tokyo"
-User: "Yes, book that one"
-→ record_decision(text="Book Hotel Accessible Tokyo", rationale="User confirmed hotel choice", topic="accommodation")
-
 ## Important
 
+- **Be proactive**: Record facts immediately when the user mentions them, don't wait to be asked
+- **Update facts** when values change - call add_fact again with the same key
 - Record decisions for ANY user confirmation or choice
 - Check constraints before recording decisions (violations will be blocked)
 - Use query to refresh your memory before recommendations
