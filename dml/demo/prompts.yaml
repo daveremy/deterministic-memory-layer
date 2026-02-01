@@ -34,8 +34,8 @@ simple:
         as important data worth tracking.
 
     - prompt: |
-        Actually, my friend Sarah is bringing her partner now,
-        so make that 8 people total.
+        Actually, two more friends want to come now. Update the
+        guest count to 8 total.
       expects: facts
       context: |
         The user updates a fact they mentioned earlier.
@@ -50,16 +50,16 @@ simple:
         You can trace back to see what changed and when.
 
     - prompt: |
-        Oh important - Sarah is gluten-free. Really important
-        we don't forget that for the menu.
+        Oh important - one of the guests is gluten-free. Add that
+        as a constraint for menu planning.
       expects: constraint
       context: |
-        The user mentions a dietary requirement naturally.
+        The user mentions a dietary requirement.
 
-        Claude should recognize this as a constraint worth
-        tracking - not just a fact, but a rule to remember.
+        Claude should record this as a constraint - a rule that
+        affects future decisions about the menu.
       narrator: |
-        Claude recognized this as a constraint, not just a fact.
+        Claude recorded this as a constraint, not just a fact.
         Dietary restrictions are rules that affect future decisions,
         so they're stored differently than regular facts.
 
@@ -84,12 +84,12 @@ simple:
       context: |
         The user suggests a menu option.
 
-        But wait - Sarah is gluten-free. Standard pizza won't work.
+        But wait - one guest is gluten-free. Standard pizza won't work.
         Will Claude catch this before committing to the plan?
       narrator: |
-        Claude checked the suggestion against Sarah's dietary
-        constraint before agreeing. Regular pizza and gluten-free
-        don't mix - the decision was flagged.
+        Claude checked the suggestion against the gluten-free
+        constraint before agreeing. Regular pizza won't work
+        for everyone - the decision was flagged.
 
         The user never said "check constraints" - Claude did this
         automatically because DML tracks these relationships.
