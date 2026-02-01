@@ -976,7 +976,15 @@ def auto_demo(delay: int) -> None:
     import time as time_module
 
     session = "dml-demo"
-    pane = f"{session}:0.0"
+    # Get the pane ID for the left (first) pane
+    pane_result = subprocess.run(
+        ["tmux", "list-panes", "-t", session, "-F", "#{pane_id}"],
+        capture_output=True, text=True
+    )
+    if pane_result.returncode != 0 or not pane_result.stdout.strip():
+        click.echo("Error: Could not find tmux panes")
+        return
+    pane = pane_result.stdout.strip().split('\n')[0]  # First pane (Claude)
 
     # Check if tmux session exists
     result = subprocess.run(
