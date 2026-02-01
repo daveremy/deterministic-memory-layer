@@ -324,13 +324,6 @@ class DemoApp(App):
             "getting lost in conversation history, DML captures them as queryable",
             "data with full provenance tracking.",
             "",
-            "[bold cyan]What does this demo show?[/]",
-            "We'll watch Claude use DML to plan a trip. You'll see how:",
-            "  • Facts are captured as structured data (not just text)",
-            "  • Constraints enforce rules mathematically (not by \"being careful\")",
-            "  • Decisions are tracked with audit trails",
-            "  • The policy engine blocks constraint violations automatically",
-            "",
             "[bold cyan]How it works[/]",
             "This is LIVE - real Claude, real responses. The prompts are scripted",
             "but Claude's responses are not. Claude is connected to the DML MCP",
@@ -342,9 +335,9 @@ class DemoApp(App):
         for i, (key, script) in enumerate(all_scripts.items(), 1):
             name = script.get("name", key)
             desc = script.get("description", "")
-            lines.append(f"  [bold cyan]{i}[/]  {name}")
+            lines.append(f"  [bold cyan]{i}[/]  [bold]{name}[/]")
             if desc:
-                lines.append(f"      [dim]{desc}[/]")
+                lines.append(f"      {desc}")
             lines.append("")
 
         intro_content.update("\n".join(lines))

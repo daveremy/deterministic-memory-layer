@@ -6,7 +6,7 @@
 
 japan_trip:
   name: "Japan Trip Planning"
-  description: "A travel planning conversation that reveals DML's power"
+  description: "Plan a trip, add a constraint late, watch it block an invalid booking, then use time-travel to explore 'what if?'"
 
   intro: |
     This is a LIVE demo - real Claude, real responses.
@@ -167,7 +167,7 @@ japan_trip:
 
 simple:
   name: "Quick Demo"
-  description: "Brief demonstration of core concepts"
+  description: "3 prompts: record facts, add a constraint, watch it block a violating decision. Fast intro to core concepts."
 
   intro: |
     Quick demo of DML - Deterministic Memory Layer.
@@ -222,7 +222,7 @@ simple:
 # High-stakes medical scenario - life/death consequences
 clinical:
   name: "Clinical Decision Support"
-  description: "Medical scenario where constraints prevent dangerous prescriptions"
+  description: "High-stakes medical scenario: a drug allergy constraint blocks a dangerous prescription. Shows how DML can save lives."
 
   intro: |
     This is a LIVE demo - real Claude, real responses.
