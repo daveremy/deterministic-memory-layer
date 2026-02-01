@@ -17,17 +17,17 @@ simple:
 
   prompts:
     - prompt: |
-        Hi! Record these facts about me: my name is Alice,
-        I'm vegetarian, and I live in Portland.
+        Hi! My name is Alice, I'm vegetarian, and I live in Portland.
       expects: facts
       context: |
-        The user introduces themselves with basic facts.
+        The user introduces themselves naturally.
 
-        Watch the Facts panel - these will be captured as
-        structured, queryable data.
+        Watch the Facts panel - Claude recognizes these as facts
+        worth capturing as structured, queryable data.
       narrator: |
         Facts captured: name, diet, and location.
-        These are structured data, not just text.
+        Claude recognized these as structured data worth storing,
+        not just conversation to forget.
 
     - prompt: |
         Add a required constraint: never recommend steakhouses
