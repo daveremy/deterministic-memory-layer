@@ -315,14 +315,29 @@ class DemoApp(App):
         intro_content = self.query_one("#intro-content", Static)
         intro_prompt = self.query_one("#intro-prompt", Static)
 
-        intro_title.update("[bold]Deterministic Memory Layer[/]\n[dim]Live Demo[/]")
+        intro_title.update("[bold]Deterministic Memory Layer[/]")
 
-        # Build script list
+        # Build content with context and script list
         lines = [
-            "This is a LIVE demo - real Claude, real responses.",
-            "Claude is connected to the DML MCP server.",
-            "The prompts are scripted, but Claude's responses are not.\n",
-            "[bold]Select a demo:[/]\n",
+            "[bold cyan]What is DML?[/]",
+            "DML gives AI agents structured, auditable memory. Instead of facts",
+            "getting lost in conversation history, DML captures them as queryable",
+            "data with full provenance tracking.",
+            "",
+            "[bold cyan]What does this demo show?[/]",
+            "We'll watch Claude use DML to plan a trip. You'll see how:",
+            "  • Facts are captured as structured data (not just text)",
+            "  • Constraints enforce rules mathematically (not by \"being careful\")",
+            "  • Decisions are tracked with audit trails",
+            "  • The policy engine blocks constraint violations automatically",
+            "",
+            "[bold cyan]How it works[/]",
+            "This is LIVE - real Claude, real responses. The prompts are scripted",
+            "but Claude's responses are not. Claude is connected to the DML MCP",
+            "server and every tool call you see is actually happening.",
+            "",
+            "[bold]Select a demo:[/]",
+            "",
         ]
         for i, (key, script) in enumerate(all_scripts.items(), 1):
             name = script.get("name", key)
