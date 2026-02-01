@@ -872,10 +872,10 @@ def chat_demo() -> None:
 @click.pass_context
 def live_tui(ctx: click.Context, script: str, pause: bool) -> None:
     """Run scripted demo with real Claude and live monitor."""
-    from dml.demo.tui import DemoTUI
+    from dml.demo.tui import DemoApp
     db_path = ctx.obj.get("db_path") if ctx.obj else None
-    demo = DemoTUI(script_name=script, pause_between=pause, db_path=db_path)
-    demo.run()
+    app = DemoApp(script_name=script, pause_between=pause, db_path=db_path)
+    app.run()
 
 
 @cli.command()

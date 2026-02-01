@@ -1,5 +1,5 @@
 """DML Demo package - TUI demos for showcasing DML functionality."""
 
-from .tui import DemoTUI, main
+from .tui import DemoApp, main
 
-__all__ = ["DemoTUI", "main"]
+__all__ = ["DemoApp", "main"]
